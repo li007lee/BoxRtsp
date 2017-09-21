@@ -83,9 +83,6 @@ HB_S32 start_listening();
 //	Retrun: 无
 ///////////////////////////////////////////////
 HB_VOID deal_client_request(struct bufferevent *client_bev, void *arg);
-
 HB_VOID deal_server_info_error_cb(struct bufferevent *client_bev, short events, void *args);
-
-
 
 #endif /* LISTEN_AND_DEAL_CMD_H_ */

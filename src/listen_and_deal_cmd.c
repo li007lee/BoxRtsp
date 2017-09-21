@@ -43,9 +43,9 @@ HB_VOID deal_server_info_error_cb(struct bufferevent *client_bev, short events, 
 	if ((p_CommunicateTags->p_DevNode->st_ClientListHead.i_ClientNum<1)\
 			&&(p_CommunicateTags->p_DevNode->st_ClientListHead.start_thread_flag == 0))
 	{
-		pthread_mutex_lock(&(st_DevListHead.mutex_ListMutex));
+		pthread_mutex_lock(&(st_DevListHead.mutex_DevListMutex));
 		remove_one_from_dev_list(p_CommunicateTags->p_DevNode);
-		pthread_mutex_unlock(&(st_DevListHead.mutex_ListMutex));
+		pthread_mutex_unlock(&(st_DevListHead.mutex_DevListMutex));
 		//free(p_CommunicateTags->p_DevNode);
 	}
 	bufferevent_free(client_bev);
@@ -65,21 +65,21 @@ HB_VOID deal_server_info_error_cb(struct bufferevent *client_bev, short events, 
 //
 //	Retrun: 无
 ///////////////////////////////////////////////
-static HB_VOID deal_open_video_error_cb(struct bufferevent *bev, short events, void *args)
+static HB_VOID deal_client_request_error_cb(struct bufferevent *bev, short events, void *args)
 {
 	CLIENT_INFO_HANDLE p_CommunicateTags = (CLIENT_INFO_HANDLE)args;
 
 	if (events & BEV_EVENT_EOF)//对端关闭
 	{
-		printf("\n####### RTSP CMD channel normal closed!\n");
+		printf("\n####### RTSP CMD peer client closed!\n");
 	}
 	else if (events & BEV_EVENT_ERROR)//错误事件
 	{
-		perror("Error from bufferevent");
+		perror("Error from bufferevent deal_client_request_error_cb");
 	}
 	else if (events & BEV_EVENT_TIMEOUT)//超时事件
 	{
-		printf("\n######RTSP CMD channel  timeout !\n");
+		printf("\n%s:%d######RTSP CMD deal_client_request_error_cb  timeout !\n", __FILE__, __LINE__);
 	}
 
 	free(p_CommunicateTags);
@@ -199,7 +199,7 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *p_CmdBuf, CLIENT_INFO_HANDLE p_Commun
 	analysis_json_dev_info(p_CmdBuf, acc_DevId, &i_DevChnl, &i_DevStreamType);
 	printf("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", acc_DevId, i_DevChnl, i_DevStreamType);
 
-	pthread_mutex_lock(&(st_DevListHead.mutex_ListMutex));
+	pthread_mutex_lock(&(st_DevListHead.mutex_DevListMutex));
 	p_DevNode = find_in_dev_list(acc_DevId, i_DevChnl, i_DevStreamType);
 	//未找到该设备，创建该设备并加入到设备链表。
 	if (p_DevNode == NULL)
@@ -208,7 +208,6 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *p_CmdBuf, CLIENT_INFO_HANDLE p_Commun
 		HB_CHAR sql[512] = {0};
 		memset(&dev_info, 0, sizeof(DEV_INFO_OBJ));
 		snprintf(sql, sizeof(sql), "select dev_ip,dev_port from device_info where dev_id='%s'", acc_DevId);
-		printf("sql:[%s]\n", sql);
 		if (SqlOperation(sql, DEV_DATA_BASE_NAME, LoadDeviceInfoCB, (void *)&dev_info) < 0)
 		{
 			//数据库操作失败
@@ -216,8 +215,8 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *p_CmdBuf, CLIENT_INFO_HANDLE p_Commun
 			p_CommunicateTags->client_bev = NULL;
 			free(p_CommunicateTags);
 			p_CommunicateTags = NULL;
-			pthread_mutex_unlock(&(st_DevListHead.mutex_ListMutex));
-			printf("data_base[%s] opt failed!\n", DEV_DATA_BASE_NAME);
+			pthread_mutex_unlock(&(st_DevListHead.mutex_DevListMutex));
+			printf("data_base[%s] exec[%s] failed!\n", DEV_DATA_BASE_NAME, sql);
 			return HB_FAILURE;
 		}
 		printf("dev_ip:[%s], dev_port:[%d]\n", dev_info.dev_ip, dev_info.dev_port);
@@ -228,34 +227,17 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *p_CmdBuf, CLIENT_INFO_HANDLE p_Commun
 			p_CommunicateTags->client_bev = NULL;
 			free(p_CommunicateTags);
 			p_CommunicateTags = NULL;
-			pthread_mutex_unlock(&(st_DevListHead.mutex_ListMutex));
+			pthread_mutex_unlock(&(st_DevListHead.mutex_DevListMutex));
 			return HB_FAILURE;
 		}
 		p_DevNode = create_new_dev_node(acc_DevId, i_DevChnl, i_DevStreamType);
 		strncpy(p_DevNode->arr_DevIp, dev_info.dev_ip, sizeof(p_DevNode->arr_DevIp));
 		p_DevNode->i_DevRtspPort = dev_info.dev_port;
-		p_DevNode->connecet_status = CONNECTING;
-
-//		snprintf(p_DevNode->arr_DevRtspUrl, sizeof(p_DevNode->arr_DevRtspUrl), \
-			"rtsp://admin:a1234567@%s:%d/h264/ch1/sub/av_stream", \
-			p_DevNode->arr_DevIp, p_DevNode->i_DevRtspPort);
-//		printf("rtsp url:[%s]\n", p_DevNode->arr_DevRtspUrl);
-//		strncpy(p_DevNode->arr_DevRtspUrl, "rtsp://admin:a1234567@%s:9036/h264/ch1/sub/av_stream", sizeof(p_DevNode->arr_DevRtspUrl));
-//		strncpy(p_DevNode->arr_DevIp, "192.168.8.21", sizeof(p_DevNode->arr_DevIp));
-//		p_DevNode->i_DevRtspPort = 8554;
-//		strncpy(p_DevNode->arr_DevIp, "10.7.126.242", sizeof(p_DevNode->arr_DevIp));
-		//海康
-//		strncpy(p_DevNode->arr_DevIp, "10.6.209.93", sizeof(p_DevNode->arr_DevIp));
-//		p_DevNode->i_DevRtspPort = 9020;
 		p_CommunicateTags->p_DevNode = p_DevNode;
 		memset(&(p_CommunicateTags->p_DevNode->st_ClientListHead), 0, sizeof(CLIENT_LIST_HEAD_OBJ));
 		add_node_to_dev_list(p_DevNode);
-		pthread_mutex_unlock(&(st_DevListHead.mutex_ListMutex));
+		pthread_mutex_unlock(&(st_DevListHead.mutex_DevListMutex));
 		test_dev_connection(p_CommunicateTags);
-//		strncpy(p_DevNode->arr_DevRtspUrl, "rtsp://admin:a1234567@10.6.209.93:9036/h264/ch1/sub/av_stream", sizeof(p_DevNode->arr_DevRtspUrl));
-//		strncpy(p_DevNode->arr_DevRtspUrl, "rtsp://admin:a1234567@10.6.209.93:9036/h264/ch1/main/av_stream", sizeof(p_DevNode->arr_DevRtspUrl));
-
-//		read_dev_sdp_cb(NULL, p_CommunicateTags);
 	}
 	else
 	{
@@ -266,25 +248,11 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *p_CmdBuf, CLIENT_INFO_HANDLE p_Commun
 			p_CommunicateTags->client_bev = NULL;
 			free(p_CommunicateTags);
 			p_CommunicateTags = NULL;
-			pthread_mutex_unlock(&(st_DevListHead.mutex_ListMutex));
+			pthread_mutex_unlock(&(st_DevListHead.mutex_DevListMutex));
 			return -1;
 		}
 
-//		while (p_DevNode->connecet_status != CONNECTED)
-//		{
-//			usleep(500*1000);
-//			if (p_DevNode->connecet_status != UN_CONNECTED)
-//			{
-//				//如果此设备还未开始传输视频流
-//				bufferevent_free(p_CommunicateTags->client_bev);
-//				p_CommunicateTags->client_bev = NULL;
-//				free(p_CommunicateTags);
-//				p_CommunicateTags = NULL;
-//				pthread_mutex_unlock(&(st_DevListHead.mutex_ListMutex));
-//				return -1;
-//			}
-//		}
-		pthread_mutex_unlock(&(st_DevListHead.mutex_ListMutex));
+		pthread_mutex_unlock(&(st_DevListHead.mutex_DevListMutex));
 		TRACE_DBG("Already have this device, add rtsp client node!\n");
 		struct bufferevent *p_AcceptClient_bev = p_CommunicateTags->client_bev;
 		BOX_CTRL_CMD_OBJ st_MsgHead;
@@ -387,7 +355,8 @@ static HB_VOID active_connect_to_rtsp_server_eventcb(struct bufferevent *connect
 	if (what & BEV_EVENT_CONNECTED)//盒子主动连接rtsp服务器成功
 	{
 		//连接成功创建客户节点
-		pthread_mutex_lock(&(st_DevListHead.mutex_ListMutex));
+		pthread_mutex_lock(&(st_DevListHead.mutex_DevListMutex));
+		pthread_mutex_lock(&(p_ClientHead->mutex_ClientListMutex));
 		CLIENT_LIST_HANDLE p_NewClientNode = NULL;
 		p_NewClientNode = new_client_node();
 		p_NewClientNode->p_SendVideoToServerEvent = connect_rtsp_server_bev;
@@ -406,7 +375,8 @@ static HB_VOID active_connect_to_rtsp_server_eventcb(struct bufferevent *connect
 		bufferevent_setcb(connect_rtsp_server_bev, NULL, NULL, error_close_cb, (HB_VOID *)p_CommunicateTags);
 //		bufferevent_enable(connect_rtsp_server_bev, EV_READ|EV_WRITE);
 		bufferevent_enable(connect_rtsp_server_bev, EV_WRITE);
-		pthread_mutex_unlock(&(st_DevListHead.mutex_ListMutex));
+		pthread_mutex_unlock(&(p_ClientHead->mutex_ClientListMutex));
+		pthread_mutex_unlock(&(st_DevListHead.mutex_DevListMutex));
 	}
 	else if (what & BEV_EVENT_ERROR)  //盒子connect 设备失败
 	{
@@ -415,18 +385,6 @@ static HB_VOID active_connect_to_rtsp_server_eventcb(struct bufferevent *connect
 
 		bufferevent_free(connect_rtsp_server_bev);
 	}
-#if 0
-	else if (what & BEV_EVENT_TIMEOUT)//盒子connect设备超时
-	{
-	}
-	else if (what & BEV_EVENT_ERROR)  //盒子connect 设备失败
-	{
-	}
-	else if (what & BEV_EVENT_EOF) //设备主动发送close给盒子
-	{
-	}
-#endif
-
 }
 
 
@@ -505,7 +463,6 @@ static HB_S32 start_send_video(HB_CHAR *p_CmdBuf, CLIENT_INFO_HANDLE p_Communica
 ///////////////////////////////////////////////
 HB_VOID deal_client_request(struct bufferevent *client_bev, void *arg)
 {
-//	struct timeval tv_w;
 	BOX_CTRL_CMD_OBJ st_MsgHead;
 	CLIENT_INFO_HANDLE p_CommunicateTags = (CLIENT_INFO_HANDLE)arg;
 
@@ -515,7 +472,6 @@ HB_VOID deal_client_request(struct bufferevent *client_bev, void *arg)
 		return;
 	}
 
-	//bufferevent_disable(client_bev, EV_READ);
 	CMD_TYPE enum_DataType = p_CommunicateTags->enum_DataType;
 	HB_CHAR arrc_RecvCmdBuf[CMD_MAX_LEN] = {0};
 
@@ -642,12 +598,12 @@ static void accept_client_connect_cb(struct evconnlistener *p_Listener, evutil_s
 
     // 为新的连接分配并设置 bufferevent,设置BEV_OPT_CLOSE_ON_FREE宏后，当连接断开时也会通知客户端关闭套接字
     struct bufferevent *accept_sockfd_bev = bufferevent_socket_new(p_CommunicateTags->base, i_AcceptSockfd, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_THREADSAFE);
-    //printf("accept_sockfd_bev addr [%p]\n", accept_sockfd_bev);
+
     //设置超时，5秒内未收到对端发来数据则断开连接
 	tv_w.tv_sec  = 5;
 	tv_w.tv_usec = 0;
 	bufferevent_set_timeouts(accept_sockfd_bev, &tv_w, NULL);
-    bufferevent_setcb(accept_sockfd_bev, deal_client_request, NULL, deal_open_video_error_cb, (void*)p_CommunicateTags);
+    bufferevent_setcb(accept_sockfd_bev, deal_client_request, NULL, deal_client_request_error_cb, (void*)p_CommunicateTags);
     bufferevent_enable(accept_sockfd_bev, EV_READ);
 
     return;
@@ -688,7 +644,7 @@ HB_S32 start_listening()
 	if(evthread_make_base_notifiable(p_EventBase) != 0)
 	{
 		TRACE_ERR("###### evthread_make_base_notifiable() err!");
-		return HB_FAILURE
+		return HB_FAILURE;
 	}
 
 	//绑定端口并接收连接

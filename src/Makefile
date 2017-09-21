@@ -11,7 +11,7 @@ LIBS :=  -L../lib/X86 \
 			-lavcodec -lavfilter -lswscale -lavutil -lswresample -lm -ldl -lpthread -lrt
 
 APPBIN = BoxRtsp_X86
-DEST_BIN = 
+DEST_BIN = /mnt/hgfs/nfs_dir/share_dir/hb/BoxRtsp/bin
 endif
 
 ifeq ($(BOX_TYPE), hisi_v100)

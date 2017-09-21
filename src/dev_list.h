@@ -21,12 +21,6 @@
 // 设备链表数据结构
 /////////////////////////////////////////////////////////////////////////////////
 
-typedef enum _DEV_STATUS
-{
-	UN_CONNECTED = 1, //设备未连接/连接失败
-	CONNECTING,	//设备连接中
-	CONNECTED	//设备已连接
-}DEV_STATUS;
 
 typedef struct DEV_LIST
 {
@@ -36,8 +30,6 @@ typedef struct DEV_LIST
 	HB_CHAR arr_DevIp[16];	//设备ip
 	HB_S32	i_DevRtspPort;		//设备rtsp端口
 	HB_CHAR arr_DevRtspUrl[512];
-
-	DEV_STATUS connecet_status;
 
 	/*************视频sdp信息*************/
 	HB_CHAR m_video[64];
@@ -65,7 +57,8 @@ typedef struct _tagDEV_LIST_HEAD
 	DEV_LIST_HANDLE p_DevListHead;
 	DEV_LIST_HANDLE p_DevListEnd;
 
-	pthread_mutex_t	mutex_ListMutex;	 //链表互斥锁
+//	pthread_mutex_t	mutex_ListMutex;	 //链表互斥锁
+	pthread_mutex_t	mutex_DevListMutex;	 //设备链表互斥所
 
 }DEV_LIST_HEAD_OBJ, *DEV_LIST_HEAD_HANDLE;
 

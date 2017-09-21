@@ -21,28 +21,12 @@
 ///////////////////////////////////////////////
 HB_VOID init_dev_list()
 {
-	//DEV_LIST_HANDLE p_DevListHead = malloc(sizeof(DEV_LIST_OBJ));
-
 	memset(&st_DevListHead, 0, sizeof(st_DevListHead));
 	st_DevListHead.cnt = 0;
 	st_DevListHead.p_DevListHead = NULL;
 	st_DevListHead.p_DevListEnd = NULL;
 
-//	memset(st_DevListHead.arr_DevIp, 0, sizeof(st_DevListHead.arr_DevIp));
-//	st_DevListHead.i_DevRtspPort = 0;
-//	st_DevListHead.i_RtspServerNum = 0;
-//	st_DevListHead.i_DevChnl = 0;		//设备通道号
-//	st_DevListHead.i_DevStreamType = 0;	//设备主子码流
-//
-//	st_DevListHead.p_Rtsp_list_head = NULL;
-//
-//	st_DevListHead.p_Prev = &st_DevListHead;
-//	st_DevListHead.p_Next = NULL;
-//	st_DevListHead.p_End = &st_DevListHead;
-//
-//	st_DevListHead.p_EventBufBev = NULL;
-
-	pthread_mutex_init(&st_DevListHead.mutex_ListMutex, NULL);
+	pthread_mutex_init(&st_DevListHead.mutex_DevListMutex, NULL);
 
 	return;
 }
@@ -65,11 +49,10 @@ DEV_LIST_HANDLE create_new_dev_node(HB_CHAR *p_DevId, HB_S32 i_DevChnl, HB_S32 i
 	strncpy(p_NewNode->p_DevId, p_DevId, sizeof(p_NewNode->p_DevId));
 	p_NewNode->i_DevChnl = i_DevChnl;
 	p_NewNode->i_DevStreamType = i_DevStreamType;
-
 	p_NewNode->st_ClientListHead.i_ClientNum = 0;
-//	p_NewNode->st_ClientListHead.p_ClientListHead = NULL;
-//	p_NewNode->st_ClientListHead.p_ClientListEnd = NULL;
-//	pthread_mutex_init(&(p_NewNode->st_ClientListHead.mutex_ListMutex), NULL);
+
+	pthread_mutex_init(&(p_NewNode->st_ClientListHead.mutex_ClientListMutex), NULL);
+
 	return p_NewNode;
 }
 
@@ -203,18 +186,18 @@ DEV_LIST_HANDLE find_in_dev_list(HB_CHAR *p_DevID, HB_S32 i_DevChnl, HB_S32 i_De
 DEV_LIST_HANDLE find_in_dev_list_sockid(HB_S32 i_SockFd)
 {
 	DEV_LIST_HANDLE p_Object = st_DevListHead.p_DevListHead;
-	pthread_mutex_lock(&(st_DevListHead.mutex_ListMutex));
+//	pthread_mutex_lock(&(st_DevListHead.mutex_DevListMutex));
 	while(p_Object != NULL)
 	{
 		//设备id，通道号，主子码流一致才算找到设备
 		if (p_Object->i_DevChnl == i_SockFd)
 		{
-			pthread_mutex_unlock(&(st_DevListHead.mutex_ListMutex));
+//			pthread_mutex_unlock(&(st_DevListHead.mutex_DevListMutex));
 			return p_Object;
 		}
 		p_Object = p_Object->p_Next;
 	}
-	pthread_mutex_unlock(&(st_DevListHead.mutex_ListMutex));
+//	pthread_mutex_unlock(&(st_DevListHead.mutex_DevListMutex));
 	//未找到设备
 	return NULL;
 }

@@ -127,7 +127,6 @@ static HB_VOID active_connect_eventcb(struct bufferevent *connect_dev_bev, HB_S1
 	{
 		HB_CHAR arr_Discribe[512] = {0};
 
-		p_DevNode->connecet_status = CONNECTED;
 		snprintf(arr_Discribe, sizeof(arr_Discribe), "DESCRIBE %s RTSP/1.0\r\nCSeq: 3\r\nAccept: application/sdp\r\n", p_DevNode->arr_DevRtspUrl);
 
 		//char *discribe = "DESCRIBE rtsp://10.7.126.242:8554/cam/realmonitor?channel=1&subtype=0 RTSP/1.0\r\nCSeq: 4\r\nAuthorization: Basic YWRtaW46MTIzNDU2\r\nUser-Agent: LibVLC/2.2.4 (LIVE555 Streaming Media v2016.02.22)\r\nAccept: application/sdp\r\n\r\n";
@@ -147,10 +146,10 @@ static HB_VOID active_connect_eventcb(struct bufferevent *connect_dev_bev, HB_S1
 		bufferevent_disable(connect_dev_bev, EV_READ|EV_WRITE);
 		printf("\n###########  box connect dev  failed !\n");
 
-		pthread_mutex_lock(&(st_DevListHead.mutex_ListMutex));
+		pthread_mutex_lock(&(st_DevListHead.mutex_DevListMutex));
 		remove_one_from_dev_list(p_DevNode);
 		p_DevNode = NULL;
-		pthread_mutex_unlock(&(st_DevListHead.mutex_ListMutex));
+		pthread_mutex_unlock(&(st_DevListHead.mutex_DevListMutex));
 		p_CommunicateTags->p_DevNode = NULL;
 		bufferevent_free(p_CommunicateTags->client_bev);
 
@@ -186,16 +185,13 @@ HB_S32 test_dev_connection(CLIENT_INFO_HANDLE p_CommunicateTags)
 	connect_to_addrlen = sizeof(struct sockaddr_in);
 
 	bufferevent_setcb(connect_dev_bev, NULL, NULL, active_connect_eventcb, (HB_VOID *)p_CommunicateTags);
-//	p_DevNode->connecet_status = CONNECTING;
 
 	if (bufferevent_socket_connect(connect_dev_bev, (struct sockaddr*)&connect_to_addr, connect_to_addrlen) < 0)//非阻塞连接设备端
 	{
 		bufferevent_free(connect_dev_bev);
 		connect_dev_bev = NULL;
-//		pthread_mutex_unlock(&(st_DevListHead.mutex_ListMutex));
 		return -1;
 	}
-//	bufferevent_enable(connect_dev_bev, EV_READ);
 
 	return 0;
 }
@@ -263,7 +259,7 @@ static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
 		p_IndexClientNode = p_ClientListHead->p_ClientListFirst;
 		while(p_IndexClientNode != NULL)
 		{
-			pthread_mutex_lock(&(st_DevListHead.mutex_ListMutex));
+			pthread_mutex_lock(&(st_DevListHead.mutex_DevListMutex));
 			if (p_IndexClientNode->del_flag == 1)
 			{
 				p_TmpClientNode = p_IndexClientNode->p_Next;
@@ -275,23 +271,20 @@ static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
 				}
 				p_IndexClientNode = p_TmpClientNode;
 			}
-//			else if (p_IndexClientNode->del_flag == 0)
 			else
 			{
-//				evbuffer_freeze(p_IndexClientNode->p_SendVideoToServerEvent->output, 1);
 				if (p_IndexClientNode->p_SendVideoToServerEvent == NULL)
 				{
 					printf("lalalalaalalalalalalalal\n");
 					p_IndexClientNode = p_IndexClientNode->p_Next;
-					pthread_mutex_unlock(&(st_DevListHead.mutex_ListMutex));
+					pthread_mutex_unlock(&(st_DevListHead.mutex_DevListMutex));
 					continue;
 				}
 				bufferevent_write(p_IndexClientNode->p_SendVideoToServerEvent, &send_cmd, sizeof(BOX_CTRL_CMD_OBJ));
 				bufferevent_write(p_IndexClientNode->p_SendVideoToServerEvent, pkt->data, pkt->size);
-//				evbuffer_unfreeze(p_IndexClientNode->p_SendVideoToServerEvent->output, 1);
 				p_IndexClientNode = p_IndexClientNode->p_Next;
 			}
-			pthread_mutex_unlock(&(st_DevListHead.mutex_ListMutex));
+			pthread_mutex_unlock(&(st_DevListHead.mutex_DevListMutex));
 		}
 
 		pkt = NULL;
@@ -456,9 +449,9 @@ End:
 //		bufferevent_free(p_ClientListHead->p_ClientListFirst->p_SendVideoToServerEvent);
 //	}
 	//destory_client_list(&(p_DevNode->st_ClientListHead));
-	pthread_mutex_lock(&(st_DevListHead.mutex_ListMutex));
+	pthread_mutex_lock(&(st_DevListHead.mutex_DevListMutex));
 	remove_one_from_dev_list(p_DevNode);
-	pthread_mutex_unlock(&(st_DevListHead.mutex_ListMutex));
+	pthread_mutex_unlock(&(st_DevListHead.mutex_DevListMutex));
 	free(p_CommunicateTags);
 	p_CommunicateTags = NULL;
 	avformat_close_input(&in_fmt_ctx_v);

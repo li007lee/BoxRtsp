@@ -8,7 +8,7 @@
 #include "my_include.h"
 
 #include "libavformat/avformat.h"
-#include "listen_and_deal_cmd.h"
+#include "libevent_server.h"
 
 #include "dev_list.h"
 
@@ -19,11 +19,10 @@ int main()
 	av_register_all();
 	avformat_network_init();
 
-	//初始化设备链表头
+//	初始化设备链表头
 	init_dev_list();
 
-	start_listening();
+	libevent_server_main_listen();
 
-	printf("############  main func exit !!!");
 	return 0;
 }

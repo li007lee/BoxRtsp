@@ -7,111 +7,103 @@
 
 #include "client_list.h"
 
-CLIENT_LIST_HEAD_HANDLE create_client_list()
+/*
+ *	Function: 向用户链表中插入节点
+ *
+ *	@param pClientListHead: [IN]需要插入链表的链表头节点
+ *  @parmm pNewNode: [IN]需要插入的节点
+ *
+ *	Retrun: 成功返回HB_SUCCESS，失败返回HB_FAILURE
+ */
+HB_S32 add_client_in_tail(CLIENT_LIST_HEAD_HANDLE pClientListHead, CLIENT_LIST_HANDLE pNewNode)
 {
-	CLIENT_LIST_HEAD_HANDLE p_ClientListHead = malloc(sizeof(CLIENT_LIST_OBJ));
-
-	p_ClientListHead->i_ClientNum = 0;
-	p_ClientListHead->p_ClientListFirst = NULL;
-	p_ClientListHead->p_ClientListLast = NULL;
-
-//	pthread_mutex_init(&(p_ClientListHead->mutex_ListMutex), NULL);
-
-	return p_ClientListHead;
-}
-
-
-CLIENT_LIST_HANDLE new_client_node()
-{
-	CLIENT_LIST_HANDLE p_NewNode = malloc(sizeof(CLIENT_LIST_OBJ));
-
-	memset(p_NewNode, 0, sizeof(CLIENT_LIST_OBJ));
-
-	return p_NewNode;
-}
-
-
-HB_S32 add_client_in_tail(CLIENT_LIST_HEAD_HANDLE p_ClientListHead, CLIENT_LIST_HANDLE p_NewNode)
-{
-	if (NULL == p_ClientListHead || NULL == p_NewNode)
+	if (NULL == pClientListHead || NULL == pNewNode)
 	{
-		printf("client head is NULL or New Node is NULL!\n");
-		return -1;
+		TRACE_ERR("client head is NULL or New Node is NULL!\n");
+		return HB_FAILURE;
 	}
 
-	if (0 == p_ClientListHead->i_ClientNum)
+	if (0 == pClientListHead->iClientNum)
 	{
-		p_ClientListHead->p_ClientListFirst = p_NewNode;
-		p_ClientListHead->p_ClientListLast = p_NewNode;
-
-		p_NewNode->p_Next = NULL;
-		p_NewNode->p_Prev = NULL;
+		pNewNode->pNext = NULL;
+		pNewNode->pPrev = NULL;
+		pClientListHead->pClientListFirst = pNewNode;
+		pClientListHead->pClientListLast = pNewNode;
 	}
 	else
 	{
-		p_NewNode->p_Next = NULL;
-		p_NewNode->p_Prev = p_ClientListHead->p_ClientListLast;
-		p_ClientListHead->p_ClientListLast->p_Next = p_NewNode;
-		p_ClientListHead->p_ClientListLast = p_NewNode;
+		pNewNode->pNext = NULL;
+		pNewNode->pPrev = pClientListHead->pClientListLast;
+		pClientListHead->pClientListLast->pNext = pNewNode;
+		pClientListHead->pClientListLast = pNewNode;
 	}
 
-	p_ClientListHead->i_ClientNum += 1;
-	printf("total client = %d\n", p_ClientListHead->i_ClientNum);
+	pClientListHead->iClientNum += 1;
+	TRACE_YELLOW("total client = %d\n", pClientListHead->iClientNum);
 
-	return 0;
+	return HB_SUCCESS;
 }
 
 
-HB_S32 remove_one_client(CLIENT_LIST_HEAD_HANDLE p_ClientListHead, CLIENT_LIST_HANDLE p_DelNode)
+/*
+ *	Function: 从用户链表删除节点
+ *
+ *	@param pClientListHead: [IN]需要插入链表的链表头节点
+ *  @parmm pDelNode: [IN]需要删除的节点
+ *
+ *	Retrun: 成功返回HB_SUCCESS，失败返回HB_FAILURE
+ */
+HB_S32 del_one_client(CLIENT_LIST_HEAD_HANDLE pClientListHead, CLIENT_LIST_HANDLE pDelNode)
 {
-	if ((p_DelNode == NULL) || (p_ClientListHead->i_ClientNum == 0))
+	if ((pDelNode == NULL) || (pClientListHead->iClientNum == 0))
 	{
-		printf("输入的节点有误！\n");
-		return -1;
+		TRACE_ERR("需要删除的节点为空或链表为空！\n");
+		return HB_FAILURE;
 	}
-	//pthread_mutex_lock(&(p_ClientListHead->mutex_ListMutex));
+
 	//如果只有一个节点
-	if (p_ClientListHead->i_ClientNum == 1)
+	if (pClientListHead->iClientNum == 1)
 	{
-		printf("del only one\n");
-		p_ClientListHead->p_ClientListFirst = NULL;
-		p_ClientListHead->p_ClientListLast = NULL;
+		pClientListHead->pClientListFirst = NULL;
+		pClientListHead->pClientListLast = NULL;
 	}
-	else if (p_DelNode->p_Next == NULL) //删除的是链表中的最后一个节点
+	else if (pDelNode->pNext == NULL) //删除的是链表中的最后一个节点
 	{
-		printf("del last\n");
-		p_DelNode->p_Prev->p_Next = NULL;
-		p_ClientListHead->p_ClientListLast = p_DelNode->p_Prev;
+		pDelNode->pPrev->pNext = NULL;
+		pClientListHead->pClientListLast = pDelNode->pPrev;
 	}
-	else if (p_DelNode->p_Prev == NULL) //删除的是第一个节点
+	else if (pDelNode->pPrev == NULL) //删除的是第一个节点
 	{
-		printf("del first\n");
-		p_DelNode->p_Next->p_Prev = NULL;
-		p_ClientListHead->p_ClientListFirst = p_DelNode->p_Next;
+		pDelNode->pNext->pPrev = NULL;
+		pClientListHead->pClientListFirst = pDelNode->pNext;
 	}
 	else //删除的是中间节点
 	{
-		printf("del middle\n");
-		p_DelNode->p_Prev->p_Next = p_DelNode->p_Next;
-		p_DelNode->p_Next->p_Prev = p_DelNode->p_Prev;
+		pDelNode->pPrev->pNext = pDelNode->pNext;
+		pDelNode->pNext->pPrev = pDelNode->pPrev;
 	}
 
-	p_ClientListHead->i_ClientNum -= 1;
-	free(p_DelNode);
-	p_DelNode = NULL;
-	printf("total client = %d\n", p_ClientListHead->i_ClientNum);
-
-	//pthread_mutex_unlock(&(p_ClientListHead->mutex_ListMutex));
+	pClientListHead->iClientNum -= 1;
+	free(pDelNode);
+	pDelNode = NULL;
+	TRACE_YELLOW("total client = %d\n", pClientListHead->iClientNum);
 
 	return 0;
 }
 
 
+/*
+ *	Function: 销毁用户链表
+ *
+ *	@param pClientListHead: [IN]需要销毁链表的链表头
+ *
+ *	Retrun: 无
+ */
 HB_VOID destory_client_list(CLIENT_LIST_HEAD_HANDLE p_ClientListHead)
 {
-	while(p_ClientListHead->p_ClientListFirst != NULL)
+	while(p_ClientListHead->pClientListFirst != NULL)
 	{
-		remove_one_client(p_ClientListHead, p_ClientListHead->p_ClientListFirst);
+		del_one_client(p_ClientListHead, p_ClientListHead->pClientListFirst);
 	}
 
 	return;

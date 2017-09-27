@@ -1,35 +1,28 @@
 /*
  * dev_list.h
  *
- *  Created on: 2017年5月22日
- *      Author: root
+ *  Created on: 2017年9月22日
+ *      Author: lijian
  */
 
-#ifndef DEV_LIST_H_
-#define DEV_LIST_H_
+#ifndef SRC_DEV_LIST_H_
+#define SRC_DEV_LIST_H_
 
 #include "my_include.h"
 
-#include "event.h"
-#include "event2/listener.h"
-
-#include "client_list.h" //rtsp服务端的链表头文件
+#include "client_list.h"
 
 #define MAX_DEV_ID_LEN	256
 
-/////////////////////////////////////////////////////////////////////////////////
-// 设备链表数据结构
-/////////////////////////////////////////////////////////////////////////////////
-
-
-typedef struct DEV_LIST
+//具体记载设备信息的结构体
+typedef struct _tagDEV_LIST
 {
-	HB_CHAR p_DevId[256];		//设备ID
-	HB_S32 i_DevChnl;		//设备通道号
-	HB_S32 i_DevStreamType;	//设备主子码流
-	HB_CHAR arr_DevIp[16];	//设备ip
-	HB_S32	i_DevRtspPort;		//设备rtsp端口
-	HB_CHAR arr_DevRtspUrl[512];
+	HB_CHAR pDevId[256];	//设备ID
+	HB_S32 iDevChnl;		//设备通道号
+	HB_S32 iDevStreamType;	//设备主子码流
+	HB_CHAR arrDevIp[16];	//设备ip
+	HB_S32	iDevRtspPort;		//设备rtsp端口
+	HB_CHAR arrDevRtspUrl[512]; //设备rtsp地址
 
 	/*************视频sdp信息*************/
 	HB_CHAR m_video[64];
@@ -39,89 +32,29 @@ typedef struct DEV_LIST
 	HB_CHAR a_rtpmap_audio[128];
 	/*************视频sdp信息*************/
 
-	//struct bufferevent *p_EventDev;
-	HB_S32 exit_flag;	//设备退出标志
+	CLIENT_LIST_HEAD_OBJ stRtspClientHead;//用户链表的链表头
 
-	struct DEV_LIST *p_Prev;
-	struct DEV_LIST *p_Next;
-
-	CLIENT_LIST_HEAD_OBJ st_ClientListHead;		//client链表中头节点的指针
-
+	struct _tagDEV_LIST *pPrev;
+	struct _tagDEV_LIST *pNext;
 }DEV_LIST_OBJ, *DEV_LIST_HANDLE;
 
-
+//设备链表结构体头，程序启动时初始化
 typedef struct _tagDEV_LIST_HEAD
 {
-	HB_S32	cnt;//打开的设备的个数
+	HB_S32	iDevNum;//当前设备链表中设备的个数
 
-	DEV_LIST_HANDLE p_DevListHead;
-	DEV_LIST_HANDLE p_DevListEnd;
+	DEV_LIST_HANDLE pDevListFirst;	//指向设备链表头结点
+	DEV_LIST_HANDLE pDevListLast;	//指向设备链表尾结点
 
-//	pthread_mutex_t	mutex_ListMutex;	 //链表互斥锁
-	pthread_mutex_t	mutex_DevListMutex;	 //设备链表互斥所
-
+	pthread_mutex_t	mutexDevListMutex;	 //设备链表互斥所
 }DEV_LIST_HEAD_OBJ, *DEV_LIST_HEAD_HANDLE;
 
-DEV_LIST_HEAD_OBJ st_DevListHead;
+DEV_LIST_HEAD_OBJ stDevListHead;
 
-///////////////////////////////////////////////
-//	Function: 初始化设备链表
-//
-//	@param: 无
-//
-//	Retrun: 无
-///////////////////////////////////////////////
 HB_VOID init_dev_list();
+HB_VOID add_to_dev_list(DEV_LIST_HANDLE pNewNode);
+HB_S32 del_one_from_dev_list(DEV_LIST_HANDLE pDelNode);
+DEV_LIST_HANDLE find_in_dev_list(HB_CHAR *pDevID, HB_S32 iDevChnl, HB_S32 iDevStreamType);
 
 
-///////////////////////////////////////////////
-//	Function: 创建一个新的设备节点并初始化
-//
-//	@param p_DevId: [IN]设备ID
-//	@param i_DevChnl: [IN]设备通道号
-//	@param i_DevStreamType: [IN]主子码流
-//
-//	Retrun: 返回新节点地址
-///////////////////////////////////////////////
-DEV_LIST_HANDLE create_new_dev_node(HB_CHAR *p_DevId, HB_S32 i_DevChnl, HB_S32 i_DevStreamType);
-
-
-///////////////////////////////////////////////
-//	Function: 尾插法向链表插入节点
-//
-//	@param: 无
-//
-//	Retrun: 返回新节点地址
-///////////////////////////////////////////////
-DEV_LIST_HANDLE add_node_to_dev_list(DEV_LIST_HANDLE p_NewNode);
-
-///////////////////////////////////////////////
-//	Function: 删除设备节点
-//
-//	@param p_DelNode: 需要删除的节点
-//
-//	Retrun: 失败返回-1, 成功返回0
-///////////////////////////////////////////////
-HB_S32 remove_one_from_dev_list(DEV_LIST_HANDLE p_DelNode);
-
-///////////////////////////////////////////////
-//	Function: 查找是不是已经有服务器连接了设备
-//
-//	@param p_DevID: [IN]需要查找的设备id
-//	@param i_DevChnl: [IN]设备通道号
-//	@param i_DevStreamType: [IN]主子码流
-//
-//	Retrun: 如果找到返回设备节点的地址，未找到返回NULL
-DEV_LIST_HANDLE find_in_dev_list(HB_CHAR *p_DevID, HB_S32 i_DevChnl, HB_S32 i_DevStreamType);
-
-
-///////////////////////////////////////////////
-//	Function: 清空设备链表
-//
-//	@param: 无
-//
-//	Retrun: 无
-///////////////////////////////////////////////
-HB_VOID destory_dev_list();
-
-#endif /* DEV_LIST_H_ */
+#endif /* SRC_DEV_LIST_H_ */

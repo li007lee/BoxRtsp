@@ -31,5 +31,4 @@ typedef struct _tagVIDEO_DATA_LIST
 ////////////////////////////////////////////////////////////////////////////////
 HB_S32 video_data_list_init(VIDEO_DATA_LIST_HANDLE video_data_list);
 
-//VIDEO_DATA_LIST_OBJ video_data_list;
 #endif /* VIDEO_DATA_LIST_H_ */

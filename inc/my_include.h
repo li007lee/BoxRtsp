@@ -140,8 +140,13 @@ typedef struct CLIENT {
 #define COLOR_STR_BLUE		     "\033[0;32;34m"
 
 #define TRACE_LOG(str, args...)  printf(COLOR_STR_GREEN  "\n########   FILE:%s  FUNCTION: %s" "\n" str "\n" COLOR_STR_NONE,__FILE__, __FUNCTION__,## args);
-#define TRACE_ERR(str, args...)   printf(COLOR_STR_RED "\n########   FILE:%s  FUNCTION: %s" "\n" str "\n" COLOR_STR_NONE,__FILE__, __FUNCTION__,## args);
+#define TRACE_ERR(str, args...)  printf(COLOR_STR_RED "\n%s:%d########" str COLOR_STR_NONE "\n",__FILE__, __LINE__,## args);
 #define TRACE_DBG(str, args...)  printf(COLOR_STR_YELLOW  "\n########   FILE:%s  FUNCTION: %s" "\n" str "\n" COLOR_STR_NONE,__FILE__, __FUNCTION__, ## args);
+#define TRACE_GREEN(str, args...)  printf(COLOR_STR_GREEN "%s:%d########" str  COLOR_STR_NONE "\n",__FILE__, __LINE__, ## args);
+#define TRACE_YELLOW(str, args...)  printf(COLOR_STR_YELLOW "%s:%d########" str  COLOR_STR_NONE "\n",__FILE__, __LINE__, ## args);
+#define TRACE_BLUE(str, args...)  printf(COLOR_STR_BLUE "%s:%d########" str  COLOR_STR_NONE "\n",__FILE__, __LINE__, ## args);
+
+
 #else
 #define TRACE_LOG(str, args...)   do{} while(0)
 #define TRACE_ERR(str, args...)    do{} while(0)

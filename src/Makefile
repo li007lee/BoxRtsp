@@ -4,7 +4,7 @@ BOX_TYPE?=pc_x86
 ifeq ($(BOX_TYPE), pc_x86)
 CC=gcc
 STRIP=strip
-CFLAGS = -Wall -O2 -Wcomment
+CFLAGS = -Wall -g
 INC_PATH = -I../inc
 LIBS :=  -L../lib/X86 \
 			-levent -levent_pthreads -lsqlite3 -lavformat \

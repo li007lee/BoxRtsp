@@ -94,15 +94,15 @@ static HB_VOID deal_client_cmd_error_cb2(struct bufferevent *bev, short events, 
 
 	if (events & BEV_EVENT_EOF)//对端关闭
 	{
-		TRACE_ERR("RTSP CMD peer client closed!");
+		TRACE_ERR("RTSP CMD peer client closed (deal_client_request_error_cb2)!");
 	}
 	else if (events & BEV_EVENT_ERROR)//错误事件
 	{
-		TRACE_ERR("Error from bufferevent deal_client_request_error_cb");
+		TRACE_ERR("Error from bufferevent (deal_client_request_error_cb2)");
 	}
 	else if (events & BEV_EVENT_TIMEOUT)//超时事件
 	{
-		TRACE_ERR("RTSP CMD deal_client_request_error_cb  timeout !");
+		TRACE_ERR("RTSP CMD (deal_client_request_error_cb2)  timeout !");
 	}
 
 
@@ -111,7 +111,9 @@ static HB_VOID deal_client_cmd_error_cb2(struct bufferevent *bev, short events, 
 		if (pMessengerArgs->pDevNode != NULL)
 		{
 			printf("del one dev from dev_list!\n");
+			pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
 			del_one_from_dev_list(pMessengerArgs->pDevNode);
+			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 		}
 		if (pMessengerArgs->pClientBev != NULL)
 		{
@@ -119,12 +121,13 @@ static HB_VOID deal_client_cmd_error_cb2(struct bufferevent *bev, short events, 
 			bufferevent_free(pMessengerArgs->pClientBev);
 			pMessengerArgs->pClientBev = NULL;
 		}
-		printf("free pMessengerArgs\n");
+		printf("deal_client_cmd_error_cb2 free pMessengerArgs\n");
 		free(pMessengerArgs);
 		pMessengerArgs = NULL;
 	}
 	else
 	{
+		printf("deal_client_cmd_error_cb2 free bev!\n");
 		//伪代码
 		bufferevent_free(bev);
 	}
@@ -148,9 +151,11 @@ static void read_dev_sdp_cb(struct bufferevent *connect_dev_bev, void *arg)
 	HB_CHAR arr_RecvBuf[2048] = {0};
 	HB_CHAR arr_SendBuf[2048] = {0};
 
-	//p_DevNode->p_EventDev = connect_dev_bev;
+	printf("read_dev_sdp_cb succeed!\n");
+
 	bufferevent_read(connect_dev_bev, arr_RecvBuf, sizeof(arr_RecvBuf));
 	bufferevent_free(connect_dev_bev);
+	connect_dev_bev = NULL;
 
 	analysis_sdp_info(arr_RecvBuf, pDevNode);
 
@@ -176,43 +181,31 @@ static void read_dev_sdp_cb(struct bufferevent *connect_dev_bev, void *arg)
 	return;
 }
 
+
 static HB_VOID active_connect_eventcb(struct bufferevent *connect_dev_bev, HB_S16 what, HB_VOID *arg)
 {
 	LIBEVENT_ARGS_HANDLE pMessengerArgs = (LIBEVENT_ARGS_HANDLE)arg;
 	DEV_LIST_HANDLE pDevNode = pMessengerArgs->pDevNode;
 
+	bufferevent_disable(connect_dev_bev, EV_READ|EV_WRITE);
+
 	if (what & BEV_EVENT_CONNECTED)//盒子主动connect设备成功
 	{
 		HB_CHAR arr_Discribe[512] = {0};
-
 		snprintf(arr_Discribe, sizeof(arr_Discribe), "DESCRIBE %s RTSP/1.0\r\nCSeq: 3\r\nAccept: application/sdp\r\n", pDevNode->arrDevRtspUrl);
 
 //		char *discribe = "DESCRIBE rtsp://10.7.126.242:8554/cam/realmonitor?channel=1&subtype=0 RTSP/1.0\r\nCSeq: 4\r\nAuthorization: Basic YWRtaW46MTIzNDU2\r\nUser-Agent: LibVLC/2.2.4 (LIVE555 Streaming Media v2016.02.22)\r\nAccept: application/sdp\r\n\r\n";
 //		printf("describe : [%s]\n", arr_Discribe);
 		TRACE_GREEN("\n############  connect dev successful and start to get dev SDP !\n");
 		bufferevent_write(connect_dev_bev, arr_Discribe, strlen(arr_Discribe)+1);
-		bufferevent_setcb(connect_dev_bev, read_dev_sdp_cb, NULL, NULL, arg);
-		bufferevent_enable(connect_dev_bev, EV_READ|EV_WRITE);
+		bufferevent_enable(connect_dev_bev, EV_WRITE);
 	}
 	else
 	{
-		//盒子connect 设备失败
-//		pDevNode->enumDevConnectStatus = DISCONNECTED;
-		bufferevent_disable(pMessengerArgs->pClientBev, EV_READ|EV_WRITE);
-		bufferevent_disable(connect_dev_bev, EV_READ|EV_WRITE);
+		//盒子connect 设备失败,当数据库中有此设备，但此设备ip连接不上时会进到此接口
+		//pMessengerArgs及pMessengerArgs中的内容无需在此处释放，会在deal_client_cmd_error_cb2超时中释放
 		TRACE_ERR("\n###########  box connect dev  failed !\n");
-
-		pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
-		del_one_from_dev_list(pDevNode);
-		pDevNode = NULL;
-		pMessengerArgs->pDevNode = NULL;
-		pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
-
-		bufferevent_free(pMessengerArgs->pClientBev);
-		pMessengerArgs->pClientBev = NULL;
-
-		free(pMessengerArgs);
-		pMessengerArgs = NULL;
+//		bufferevent_disable(connect_dev_bev, EV_READ|EV_WRITE);
 		bufferevent_free(connect_dev_bev);
 		connect_dev_bev = NULL;
 	}
@@ -235,29 +228,25 @@ HB_VOID test_dev_connection(LIBEVENT_ARGS_HANDLE pMessengerArgs)
 
 	DEV_LIST_HANDLE pDevNode = pMessengerArgs->pDevNode;
 //	struct bufferevent *pClientBev = pMessengerArgs->pClientBev;
-	struct event_base *base = pMessengerArgs->pEventBase;
 	HB_S32 connect_to_addrlen;
 	struct sockaddr_in connect_to_addr;
 	struct bufferevent *connect_dev_bev = NULL;
-//	struct event_base *base = bufferevent_get_base(pClientBev);
 
-	connect_dev_bev = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS|BEV_OPT_THREADSAFE);
+
+	connect_dev_bev = bufferevent_socket_new(pMessengerArgs->pEventBase, -1, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS|BEV_OPT_THREADSAFE);
+//	connect_dev_bev = bufferevent_socket_new(pMessengerArgs->pEventBase, -1, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_THREADSAFE);
 	bzero(&connect_to_addr, sizeof(connect_to_addr));
 	connect_to_addr.sin_family = AF_INET;
 	connect_to_addr.sin_port = htons(pDevNode->iDevRtspPort);
-	inet_pton(AF_INET, pDevNode->arrDevIp, &connect_to_addr.sin_addr);
+	inet_pton(AF_INET, pDevNode->arrDevIp, (void *)&connect_to_addr.sin_addr);
 
 	//snprintf(p_DevNode->arr_DevRtspUrl, sizeof(p_DevNode->arr_DevRtspUrl), "DESCRIBE %s RTSP/1.0\r\nCSeq: 3\r\nAccept: application/sdp\r\n", in_filename_v);
 	snprintf(pDevNode->arrDevRtspUrl, sizeof(pDevNode->arrDevRtspUrl), "%s", in_filename_v);
 	connect_to_addrlen = sizeof(struct sockaddr_in);
 
-	bufferevent_setcb(connect_dev_bev, NULL, NULL, active_connect_eventcb, (HB_VOID *)pMessengerArgs);
-
-	if (bufferevent_socket_connect(connect_dev_bev, (struct sockaddr*)&connect_to_addr, connect_to_addrlen) < 0)//非阻塞连接设备端
-	{
-		bufferevent_free(connect_dev_bev);
-		connect_dev_bev = NULL;
-	}
+	bufferevent_socket_connect(connect_dev_bev, (struct sockaddr*)&connect_to_addr, connect_to_addrlen);
+	bufferevent_setcb(connect_dev_bev, read_dev_sdp_cb, NULL, active_connect_eventcb, (HB_VOID *)pMessengerArgs);
+    bufferevent_enable(connect_dev_bev, EV_READ);
 }
 /***********************测试设备连通性END***********************/
 /***********************测试设备连通性END***********************/
@@ -482,6 +471,7 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
     }
 
 End:
+	avformat_close_input(&in_fmt_ctx_v);
 	if(1 == read_video_data_node_task_flag)
 	{
 		printf("join send thread!\n");
@@ -500,7 +490,6 @@ End:
 	pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 	free(pMessengerArgs);
 	pMessengerArgs = NULL;
-	avformat_close_input(&in_fmt_ctx_v);
 
 	TRACE_BLUE("read video thread exit!\n");
     return NULL;

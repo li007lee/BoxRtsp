@@ -159,6 +159,7 @@ static HB_VOID connect_to_rtsp_server_event_cb(struct bufferevent *pConnectRtspS
 		pClientNode->pSendVideoToServerEvent = pConnectRtspServerBev;
 		pMessengerArgs->pClientNode = pClientNode;
 
+		pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
 		pthread_mutex_lock(&(pRtspClientHead->mutexClientListMutex));
 //		pMessengerArgs->del_flag = 0;
 
@@ -175,6 +176,7 @@ static HB_VOID connect_to_rtsp_server_event_cb(struct bufferevent *pConnectRtspS
 		bufferevent_setcb(pConnectRtspServerBev, NULL, NULL, send_rtsp_to_server_event_error_cb, (HB_VOID *)pMessengerArgs);
 		bufferevent_enable(pConnectRtspServerBev, EV_WRITE);
 		pthread_mutex_unlock(&(pRtspClientHead->mutexClientListMutex));
+		pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 	}
 	else  //盒子connect rtsp服务器失败
 	{
@@ -286,15 +288,15 @@ static HB_VOID deal_client_cmd_error_cb1(struct bufferevent *bev, short events, 
 
 	if (events & BEV_EVENT_EOF)//对端关闭
 	{
-		TRACE_ERR("RTSP CMD peer client closed!");
+		TRACE_ERR("RTSP CMD peer client closed (deal_client_request_error_cb1)!");
 	}
 	else if (events & BEV_EVENT_ERROR)//错误事件
 	{
-		TRACE_ERR("Error from bufferevent deal_client_request_error_cb");
+		TRACE_ERR("Error from bufferevent (deal_client_request_error_cb1)");
 	}
 	else if (events & BEV_EVENT_TIMEOUT)//超时事件
 	{
-		TRACE_ERR("RTSP CMD deal_client_request_error_cb  timeout !");
+		TRACE_ERR("RTSP CMD (deal_client_request_error_cb1)  timeout !");
 	}
 
 
@@ -314,12 +316,13 @@ static HB_VOID deal_client_cmd_error_cb1(struct bufferevent *bev, short events, 
 			bufferevent_free(pMessengerArgs->pClientBev);
 			pMessengerArgs->pClientBev = NULL;
 		}
-		printf("free pMessengerArgs\n");
+		printf("deal_client_cmd_error_cb1 free pMessengerArgs\n");
 		free(pMessengerArgs);
 		pMessengerArgs = NULL;
 	}
 	else
 	{
+		printf("deal_client_cmd_error_cb1 free bev!\n");
 		//伪代码
 		bufferevent_free(bev);
 	}
@@ -447,7 +450,6 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, LIBEVENT_ARGS_HANDLE pMessen
 		add_to_dev_list(pDevNode);
 		pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 		test_dev_connection(pMessengerArgs);
-
 	}
 	else
 	{
@@ -482,6 +484,7 @@ HB_VOID deal_client_cmd(struct bufferevent *pClientBev, void *arg)
 		return;
 	}
 
+	memset(&st_MsgHead, 0, sizeof(BOX_CTRL_CMD_OBJ));
 	CMD_TYPE enum_DataType = pMessengerArgs->enumCmdType;
 	HB_CHAR arrc_RecvCmdBuf[CMD_MAX_LEN] = {0};
 
@@ -520,14 +523,13 @@ HB_VOID deal_client_cmd(struct bufferevent *pClientBev, void *arg)
 		case CMD_BODY: //命令信息
 		{
 			printf("cmd body!\n");
-#if 0
 			//读取命令信息
 			if (evbuffer_remove(src, arrc_RecvCmdBuf, CMD_MAX_LEN) > 0)
 			{
 				if (strstr(arrc_RecvCmdBuf, "open_video") != NULL)
 				{
 					printf("recv recv recv recv open_video:[%s]\n", arrc_RecvCmdBuf);
-//					p_CommunicateTags->client_bev = client_bev;
+					pMessengerArgs->pClientBev = pClientBev;
 					//收到rtsp打开请求
 					deal_open_video_cmd(arrc_RecvCmdBuf, pMessengerArgs);
 				}
@@ -536,12 +538,12 @@ HB_VOID deal_client_cmd(struct bufferevent *pClientBev, void *arg)
 					printf("recv recv recv recv server_info:[%s]\n", arrc_RecvCmdBuf);
 					//拿到了rtsp服务器的ip和端口，需要将视频流发到这里
 					//创建线程并发送数据
-					bufferevent_free(client_bev);
-//					p_CommunicateTags->client_bev = NULL;
-					start_send_video(arrc_RecvCmdBuf, pMessengerArgs);
+					bufferevent_free(pClientBev);
+					pClientBev = NULL;
+					pMessengerArgs->pClientBev = NULL;
+					connect_to_rtsp_server(arrc_RecvCmdBuf, pMessengerArgs);
 				}
 			}
-#endif
 			break;
 		}
 		case CMD_ALL://头信息和命令信息一起发过来的
@@ -565,7 +567,6 @@ HB_VOID deal_client_cmd(struct bufferevent *pClientBev, void *arg)
 						//收到rtsp打开请求
 						deal_open_video_cmd(arrc_RecvCmdBuf, pMessengerArgs);
 					}
-#if 1
 					else if (strstr(arrc_RecvCmdBuf, "server_info") != NULL)
 					{
 
@@ -577,7 +578,6 @@ HB_VOID deal_client_cmd(struct bufferevent *pClientBev, void *arg)
 						pMessengerArgs->pClientBev = NULL;
 						connect_to_rtsp_server(arrc_RecvCmdBuf, pMessengerArgs);
 					}
-#endif
 				}
 			}
 			break;
@@ -675,5 +675,4 @@ HB_VOID libevent_server_main_listen()
 	event_base_dispatch(pEventBase);
 	evconnlistener_free(pListener);
 	event_base_free(pEventBase);
-
 }

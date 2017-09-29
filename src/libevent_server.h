@@ -23,6 +23,8 @@
 
 #define CMD_MAX_LEN	(512) //RTSP服务器发来命令的最大长度
 
+extern struct event_base *pEventBase;
+
 typedef enum _tagDATA_TYPE
 {
     I_FRAME=1,   //I帧
@@ -55,23 +57,22 @@ typedef struct _tagBOX_CTRL_CMD
 }BOX_CTRL_CMD_OBJ, *BOX_CTRL_CMD_HANDLE;
 
 
-//通信消息类型
-typedef enum cmd_type
-{
-	CMD_HEAD = 1,//消息头
-	CMD_BODY,	//消息体
-	CMD_ALL,	//消息头+消息体
-}CMD_TYPE;
-
 //libevent 通信参数结构体
 typedef struct _LIBEVENT_ARGS
 {
-	CMD_TYPE enumCmdType;//通信消息类型
 	DEV_LIST_HANDLE pDevNode; //当前设备节点
-	CLIENT_LIST_HANDLE pClientNode;	//当前客户节点
-	struct event_base *pEventBase; //libevent 反应堆
 	struct bufferevent *pClientBev;//与客户端信令交互的事件句柄
 }LIBEVENT_ARGS_OBJ, *LIBEVENT_ARGS_HANDLE;
+
+//libevent 通信参数结构体
+typedef struct _LIBEVENT_ARGS_DEV
+{
+	DEV_LIST_HANDLE pDevNode; //当前设备节点
+	CLIENT_LIST_HANDLE pClientNode;	//当前客户节点
+//	struct event_base *pEventBase; //libevent 反应堆
+//	struct bufferevent *pClientBev;//与客户端信令交互的事件句柄
+}LIBEVENT_ARGS_DEV_OBJ, *LIBEVENT_ARGS_DEV_HANDLE;
+
 
 HB_VOID libevent_server_main_listen();
 HB_VOID deal_client_cmd(struct bufferevent *pClientBev, void *arg);

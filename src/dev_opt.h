@@ -12,7 +12,7 @@
 
 #include "libevent_server.h"
 
-HB_VOID test_dev_connection(LIBEVENT_ARGS_HANDLE pMessengerArgs);
+HB_VOID test_dev_connection(DEV_LIST_HANDLE pDevNode);
 HB_VOID *read_video_data_from_dev_task(HB_VOID *arg);
 
 #endif /* SRC_DEV_OPT_H_ */

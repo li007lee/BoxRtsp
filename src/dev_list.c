@@ -98,6 +98,9 @@ HB_S32 del_one_from_dev_list(DEV_LIST_HANDLE pDelNode)
 	}
 
 	stDevListHead.iDevNum -= 1;
+
+	//在此处销毁用户链表中的所有节点
+
 	free(pDelNode);
 	pDelNode = NULL;
 

@@ -58,13 +58,6 @@ typedef struct _tagBOX_CTRL_CMD
 
 
 //libevent 通信参数结构体
-typedef struct _LIBEVENT_ARGS
-{
-	DEV_LIST_HANDLE pDevNode; //当前设备节点
-	struct bufferevent *pClientBev;//与客户端信令交互的事件句柄
-}LIBEVENT_ARGS_OBJ, *LIBEVENT_ARGS_HANDLE;
-
-//libevent 通信参数结构体
 typedef struct _LIBEVENT_ARGS_DEV
 {
 	DEV_LIST_HANDLE pDevNode; //当前设备节点

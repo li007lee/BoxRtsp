@@ -200,3 +200,11 @@ HB_S32 del_one_wait_client(WAIT_CLIENT_LIST_HEAD_HANDLE pWaitClientListHead, WAI
 	return 0;
 }
 
+
+HB_VOID destory_wait_client(WAIT_CLIENT_LIST_HEAD_HANDLE pWaitClientListHead)
+{
+	while(pWaitClientListHead->iWaitClientNum > 1)
+	{
+		del_one_wait_client(pWaitClientListHead, pWaitClientListHead->pWaitClientListFirst);
+	}
+}

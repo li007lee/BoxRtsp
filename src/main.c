@@ -9,13 +9,11 @@
 
 #include "libavformat/avformat.h"
 #include "libevent_server.h"
-
 #include "dev_list.h"
 
 int main()
 {
 	signal(SIGPIPE, SIG_IGN);
-//	signal(SIGSEGV, SIG_IGN)
 
 	av_register_all();
 	avformat_network_init();

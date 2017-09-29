@@ -80,62 +80,6 @@ static void analysis_sdp_info(HB_CHAR *p_SdpBuf, DEV_LIST_HANDLE p_DevNode)
 
 
 /*
- *	Function: 处理与客户端信令交互时产生的异常和错误(第二次信令交互,收取将数据流推送到rtsp服务器的ip和端口)
- *
- *	@param bev: 异常产生的事件句柄
- *	@param events: 异常事件类型
- *  @parmm args	: 实际为LIBEVENT_ARGS_HANDLE类型的参数结构体
- *
- *	Retrun: 无
- */
-static HB_VOID deal_client_cmd_error_cb2(struct bufferevent *bev, short events, void *args)
-{
-	LIBEVENT_ARGS_HANDLE pMessengerArgs = (LIBEVENT_ARGS_HANDLE)args;
-
-	if (events & BEV_EVENT_EOF)//对端关闭
-	{
-		TRACE_ERR("RTSP CMD peer client closed (deal_client_request_error_cb2)!");
-	}
-	else if (events & BEV_EVENT_ERROR)//错误事件
-	{
-		TRACE_ERR("Error from bufferevent (deal_client_request_error_cb2)");
-	}
-	else if (events & BEV_EVENT_TIMEOUT)//超时事件
-	{
-		TRACE_ERR("RTSP CMD (deal_client_request_error_cb2)  timeout !");
-	}
-
-
-	if (pMessengerArgs != NULL)
-	{
-		if (pMessengerArgs->pDevNode != NULL)
-		{
-			printf("del one dev from dev_list!\n");
-			pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
-			del_one_from_dev_list(pMessengerArgs->pDevNode);
-			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
-		}
-//			此连接事件由deal_client_cmd_error_cb1超时时进行释放
-//		if (pMessengerArgs->pClientBev != NULL)
-//		{
-//			printf("bufferevent_free pClientBev!\n");
-//			bufferevent_free(pMessengerArgs->pClientBev);
-//			pMessengerArgs->pClientBev = NULL;
-//		}
-		printf("deal_client_cmd_error_cb2 free pMessengerArgs\n");
-		free(pMessengerArgs);
-		pMessengerArgs = NULL;
-	}
-	else
-	{
-		printf("deal_client_cmd_error_cb2 free bev!\n");
-		//伪代码
-		bufferevent_free(bev);
-	}
-
-}
-
-/*
  *	Function: 从设备获取sdp信息并解析
  *
  *	@param bev: 与设备的链接句柄
@@ -145,14 +89,7 @@ static HB_VOID deal_client_cmd_error_cb2(struct bufferevent *bev, short events, 
  */
 static void read_dev_sdp_cb(struct bufferevent *connect_dev_bev, void *arg)
 {
-	HB_S32 i;
-	LIBEVENT_ARGS_HANDLE pMessengerArgs = (LIBEVENT_ARGS_HANDLE)arg;
-	DEV_LIST_HANDLE pDevNode = pMessengerArgs->pDevNode;
-	struct bufferevent *pClientBev = pMessengerArgs->pClientBev;
-
-//	free(pMessengerArgs);
-//	pMessengerArgs = NULL;
-
+	DEV_LIST_HANDLE pDevNode = (DEV_LIST_HANDLE)arg;
 	BOX_CTRL_CMD_OBJ st_MsgHead;
 	HB_CHAR arr_RecvBuf[2048] = {0};
 	HB_CHAR arr_SendBuf[2048] = {0};
@@ -162,8 +99,6 @@ static void read_dev_sdp_cb(struct bufferevent *connect_dev_bev, void *arg)
 	connect_dev_bev = NULL;
 
 	analysis_sdp_info(arr_RecvBuf, pDevNode);
-
-//	p_DevNode->enumDevConnectStatus = CONNECTED;
 
 	memset(&st_MsgHead, 0, sizeof(st_MsgHead));
 	memcpy(st_MsgHead.header, "hBzHbox@", 8);
@@ -177,20 +112,16 @@ static void read_dev_sdp_cb(struct bufferevent *connect_dev_bev, void *arg)
 	st_MsgHead.cmd_length = strlen(arr_SendBuf+sizeof(BOX_CTRL_CMD_OBJ));
 	pDevNode->enumDevConnectStatus = CONNECTED;//设置为设备已连接状态
 
-//	while(pDevNode->stWaitClientHead.iWaitClientNum > 0)
-//	{
-//		struct bufferevent *p_AcceptClient_bev = pDevNode->stWaitClientHead.pWaitClientListFirst->pWaitClientLiveventMsgArgs->pClientBev;
-//		bufferevent_write(p_AcceptClient_bev, arr_SendBuf, st_MsgHead.cmd_length+sizeof(BOX_CTRL_CMD_OBJ));
-//		bufferevent_setcb(p_AcceptClient_bev, deal_client_cmd, NULL, deal_client_cmd_error_cb2, (HB_VOID *)pMessengerArgs);
-//		bufferevent_enable(p_AcceptClient_bev, EV_READ);
-//		pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
-//		del_one_wait_client(&(pDevNode->stWaitClientHead), pDevNode->stWaitClientHead.pWaitClientListFirst);
-//		pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
-//	}
-
-	bufferevent_write(pClientBev, arr_SendBuf, st_MsgHead.cmd_length+sizeof(BOX_CTRL_CMD_OBJ));
-	bufferevent_setcb(pClientBev, deal_client_cmd, NULL, deal_client_cmd_error_cb2, (HB_VOID *)pMessengerArgs);
-	bufferevent_enable(pClientBev, EV_READ);
+	while(pDevNode->stWaitClientHead.iWaitClientNum > 0)
+	{
+		struct bufferevent *p_AcceptClient_bev = pDevNode->stWaitClientHead.pWaitClientListFirst->pWaitClientBev;
+		bufferevent_write(p_AcceptClient_bev, arr_SendBuf, st_MsgHead.cmd_length+sizeof(BOX_CTRL_CMD_OBJ));
+		bufferevent_setcb(p_AcceptClient_bev, deal_client_cmd, NULL, NULL, (HB_VOID *)pDevNode);
+		bufferevent_enable(p_AcceptClient_bev, EV_READ);
+		pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
+		del_one_wait_client(&(pDevNode->stWaitClientHead), pDevNode->stWaitClientHead.pWaitClientListFirst);
+		pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
+	}
 
 	return;
 }
@@ -198,17 +129,14 @@ static void read_dev_sdp_cb(struct bufferevent *connect_dev_bev, void *arg)
 
 static HB_VOID active_connect_eventcb(struct bufferevent *connect_dev_bev, HB_S16 what, HB_VOID *arg)
 {
-	LIBEVENT_ARGS_HANDLE pMessengerArgs = (LIBEVENT_ARGS_HANDLE)arg;
-	DEV_LIST_HANDLE pDevNode = pMessengerArgs->pDevNode;
-
-//	bufferevent_disable(connect_dev_bev, EV_READ|EV_WRITE);
+	DEV_LIST_HANDLE pDevNode = (DEV_LIST_HANDLE)arg;
 
 	if (what & BEV_EVENT_CONNECTED)//盒子主动connect设备成功
 	{
 		HB_CHAR arr_Discribe[512] = {0};
 		snprintf(arr_Discribe, sizeof(arr_Discribe), "DESCRIBE %s RTSP/1.0\r\nCSeq: 3\r\nAccept: application/sdp\r\n", pDevNode->arrDevRtspUrl);
 //		char *discribe = "DESCRIBE rtsp://10.7.126.242:8554/cam/realmonitor?channel=1&subtype=0 RTSP/1.0\r\nCSeq: 4\r\nAuthorization: Basic YWRtaW46MTIzNDU2\r\nUser-Agent: LibVLC/2.2.4 (LIVE555 Streaming Media v2016.02.22)\r\nAccept: application/sdp\r\n\r\n";
-		printf("describe : [%s]\n", arr_Discribe);
+//		printf("describe : [%s]\n", arr_Discribe);
 		TRACE_GREEN("\n############  connect dev successful and start to get dev SDP !\n");
 
 		bufferevent_write(connect_dev_bev, arr_Discribe, strlen(arr_Discribe)+1);
@@ -217,40 +145,22 @@ static HB_VOID active_connect_eventcb(struct bufferevent *connect_dev_bev, HB_S1
 	else
 	{
 		//盒子connect 设备失败,当数据库中有此设备，但此设备ip连接不上时会进到此接口
-		//pMessengerArgs及pMessengerArgs中的内容无需在此处释放，会在deal_client_cmd_error_cb2超时中释放
 		TRACE_ERR("\n###########  box connect dev  failed !\n");
 		pDevNode->enumDevConnectStatus = DISCONNECT;//设置设备连接失败状态
-//		bufferevent_disable(connect_dev_bev, EV_READ|EV_WRITE);
-//		bufferevent_free(connect_dev_bev);
-//		connect_dev_bev = NULL;
 
-		if (pMessengerArgs != NULL)
+		if (pDevNode != NULL)
 		{
-			if (pMessengerArgs->pDevNode != NULL)
-			{
-				printf("del one dev from dev_list!\n");
-				pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
-				del_one_from_dev_list(pMessengerArgs->pDevNode);
-				pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
-			}
-//			此连接事件由deal_client_cmd_error_cb1超时时进行释放
-//			if (pMessengerArgs->pClientBev != NULL)
-//			{
-//				printf("active_connect_eventcb pClientBev!\n");
-//				bufferevent_free(pMessengerArgs->pClientBev);
-//				pMessengerArgs->pClientBev = NULL;
-//			}
-			printf("active_connect_eventcb free pMessengerArgs\n");
-			free(pMessengerArgs);
-			pMessengerArgs = NULL;
+			printf("del one dev from dev_list!\n");
+			pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
+			destory_wait_client(&(pDevNode->stWaitClientHead));//如果连接设备失败，则需要删除所有正在等待当前设备的用户节点
+			del_one_from_dev_list(pDevNode);
+			pDevNode = NULL;
+			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 		}
-		else
-		{
-			printf("active_connect_eventcb free bev!\n");
-			//伪代码
-			bufferevent_free(connect_dev_bev);
-			connect_dev_bev = NULL;
-		}
+//		此连接事件由deal_client_cmd_error_cb1超时时进行释放
+		printf("active_connect_eventcb free bev!\n");
+		bufferevent_free(connect_dev_bev);
+		connect_dev_bev = NULL;
 	}
 }
 
@@ -262,14 +172,14 @@ static HB_VOID active_connect_eventcb(struct bufferevent *connect_dev_bev, HB_S1
  *
  * Return : 无
  */
-HB_VOID test_dev_connection(LIBEVENT_ARGS_HANDLE pMessengerArgs)
+//HB_VOID test_dev_connection(LIBEVENT_ARGS_HANDLE pMessengerArgs)
+HB_VOID test_dev_connection(DEV_LIST_HANDLE pDevNode)
 {
 	const char *in_filename_v = "rtsp://admin:888888@192.168.8.21:8554/H264MainStream";//汉邦ipc
 	//const char *in_filename_v = "rtsp://admin:admin@192.168.8.198:554/video1";//宇视ipc video1-主码流 video2-辅码流 video3-第三码流
 	//const char *in_filename_v = "rtsp://admin:123456@10.7.126.242:8554/cam/realmonitor?channel=1&subtype=0";//大华
 	//const char *in_filename_v = "rtsp://admin:a1234567@10.6.209.93:9020/h264/ch1/main/av_stream";//海康
 
-	DEV_LIST_HANDLE pDevNode = pMessengerArgs->pDevNode;
 	struct sockaddr_in connect_to_addr;
 	struct bufferevent *connect_dev_bev = bufferevent_socket_new(pEventBase, -1, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS|BEV_OPT_THREADSAFE);
 //	printf("bufferevent_get_enabled(connect_dev_bev):[%d]\n", bufferevent_get_enabled(connect_dev_bev));
@@ -285,7 +195,7 @@ HB_VOID test_dev_connection(LIBEVENT_ARGS_HANDLE pMessengerArgs)
 	tv_w.tv_usec = 0;
 	bufferevent_set_timeouts(connect_dev_bev, &tv_w, NULL);
 	bufferevent_socket_connect(connect_dev_bev, (struct sockaddr*)&connect_to_addr, sizeof(struct sockaddr_in));
-	bufferevent_setcb(connect_dev_bev, read_dev_sdp_cb, NULL, active_connect_eventcb, (HB_VOID *)pMessengerArgs);
+	bufferevent_setcb(connect_dev_bev, read_dev_sdp_cb, NULL, active_connect_eventcb, (HB_VOID *)pDevNode);
     bufferevent_enable(connect_dev_bev, EV_READ);
 }
 /***********************测试设备连通性END***********************/
@@ -347,7 +257,8 @@ static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
 		pIndexClientNode = pRtspClientHead->pClientListFirst;
 		while(pIndexClientNode != NULL)
 		{
-			pthread_mutex_lock(&(pRtspClientHead->mutexClientListMutex));
+			pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
+//			pthread_mutex_lock(&(pRtspClientHead->mutexClientListMutex));
 			if (pIndexClientNode->iDelFlag == 1)
 			{
 				pTmpClientNode = pIndexClientNode->pNext;
@@ -365,7 +276,8 @@ static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
 				bufferevent_write(pIndexClientNode->pSendVideoToServerEvent, pkt->data, pkt->size);
 				pIndexClientNode = pIndexClientNode->pNext;
 			}
-			pthread_mutex_unlock(&(pRtspClientHead->mutexClientListMutex));
+//			pthread_mutex_unlock(&(pRtspClientHead->mutexClientListMutex));
+			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 		}
 
 		pkt = NULL;

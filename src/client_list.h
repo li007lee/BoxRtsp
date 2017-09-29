@@ -40,7 +40,7 @@ typedef struct CLIENT_LIST_HEAD
 	CLIENT_LIST_HANDLE pClientListFirst;//第一个客户节点
 	CLIENT_LIST_HANDLE pClientListLast;//最后一个客户节点
 
-	pthread_mutex_t	mutexClientListMutex;	 //客户链表互斥锁
+//	pthread_mutex_t	mutexClientListMutex;	 //客户链表互斥锁
 
 }CLIENT_LIST_HEAD_OBJ, *CLIENT_LIST_HEAD_HANDLE;
 
@@ -48,7 +48,7 @@ typedef struct CLIENT_LIST_HEAD
 //等待接入的用户链表
 typedef struct WAIT_CLIENT_LIST
 {
-	struct bufferevent *pWaitClientLiveventMsgArgs;
+	struct bufferevent *pWaitClientBev;
 
 	struct WAIT_CLIENT_LIST *pNext;
 	struct WAIT_CLIENT_LIST *pPrev;
@@ -60,9 +60,6 @@ typedef struct WAIT_CLIENT_LIST_HEAD
 
 	WAIT_CLIENT_LIST_HANDLE pWaitClientListFirst;//第一个客户节点
 	WAIT_CLIENT_LIST_HANDLE pWaitClientListLast;//最后一个客户节点
-
-	pthread_mutex_t	mutexWaitClientListMutex;	 //客户链表互斥锁
-
 }WAIT_CLIENT_LIST_HEAD_OBJ, *WAIT_CLIENT_LIST_HEAD_HANDLE;
 
 HB_S32	add_client_in_tail(CLIENT_LIST_HEAD_HANDLE pClientListHead, CLIENT_LIST_HANDLE pNewNode);
@@ -71,5 +68,6 @@ HB_VOID destory_client_list(CLIENT_LIST_HEAD_HANDLE pClientListHead);
 
 HB_S32	add_wait_client_in_tail(WAIT_CLIENT_LIST_HEAD_HANDLE pWaitClientListHead, WAIT_CLIENT_LIST_HANDLE pNewNode);
 HB_S32 del_one_wait_client(WAIT_CLIENT_LIST_HEAD_HANDLE pWaitClientListHead, WAIT_CLIENT_LIST_HANDLE pDelNode);
+HB_VOID destory_wait_client(WAIT_CLIENT_LIST_HEAD_HANDLE pWaitClientListHead);
 
 #endif /* CLIENT_LIST_H_ */

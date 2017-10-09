@@ -9,6 +9,8 @@
 #include "dev_list.h"
 #include "video_data_list.h"
 
+//#include "libavcodec/avcodec.h"
+
 /***********************测试设备连通性***********************/
 /***********************测试设备连通性***********************/
 /***********************测试设备连通性***********************/
@@ -350,21 +352,30 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
     for (i = 0; i < in_fmt_ctx_v->nb_streams; i++)
     {
         //Create output AVStream according to input AVStream
-        if(in_fmt_ctx_v->streams[i]->codec->codec_type==AVMEDIA_TYPE_VIDEO)
+//        if(in_fmt_ctx_v->streams[i]->codec->codec_type==AVMEDIA_TYPE_VIDEO)
+    	AVStream *stream = in_fmt_ctx_v->streams[i];
+    	AVCodec *codec =  avcodec_find_decoder(stream->codecpar->codec_id);
+    	AVCodecContext *codec_ctx = avcodec_alloc_context3(codec);//需要使用avcodec_free_context释放
+
+    	//事实上codecpar包含了大部分解码器相关的信息，这里是直接从AVCodecParameters复制到AVCodecContext
+    	avcodec_parameters_to_context(codec_ctx, stream->codecpar);
+//    	av_codec_set_pkt_timebase(codec_ctx, stream->time_base);
+    	if(codec_ctx->codec_type==AVMEDIA_TYPE_VIDEO)
         {
 			AVStream *in_stream = in_fmt_ctx_v->streams[i];
 			printf("\nBBBBBBBBB   [frame rate = %lf]  [%d*%d]\n", \
 					(in_stream->avg_frame_rate.num/(double)(in_stream->avg_frame_rate.den)), \
-					in_stream->codec->width, in_stream->codec->height);
+					codec_ctx->width, codec_ctx->height);
 			videoindex_v=i;
 			//break;
         }
-        else if(in_fmt_ctx_v->streams[i]->codec->codec_type==AVMEDIA_TYPE_AUDIO)
+        else if(codec_ctx->codec_type==AVMEDIA_TYPE_AUDIO)
         {
 			audioindex_a=i;
 			//break;
         }
-
+    	avcodec_free_context(&codec_ctx);
+    	codec_ctx = NULL;
     }
     printf("\n####  open rtsp successful, video_index=%d  audio_index=%d\n", videoindex_v, audioindex_a);
     video_data_list_init(&(pClientListHead->stVideoDataList));

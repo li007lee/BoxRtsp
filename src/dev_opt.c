@@ -288,25 +288,50 @@ static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
     return NULL;
 }
 
+static int interrupt_cb(void *ctx)
+{
+    // do something
+//	AVFormatContext *pFormatCtx = (AVFormatContext *)ctx;
+	time_t *time_last = (time_t *)ctx;
+	time_t time_now = 0;
+
+	time(&time_now);
+//	printf("time_last=[%ld], time_now=[%ld]\n", *time_last, time_now);
+    if ((time_now-*time_last) > 5)
+    {
+		printf("av_read_frame time out\n");
+		return AVERROR_EOF;//这个就是超时的返回
+//		return 1;
+    }
+
+    return 0;
+}
+
 //从设备读取视频流线程
 HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 {
 	pthread_detach(pthread_self());
-//	LIBEVENT_ARGS_HANDLE pMessengerArgs = (LIBEVENT_ARGS_HANDLE)arg;
 	DEV_LIST_HANDLE pDevNode = (DEV_LIST_HANDLE)arg;
 	CLIENT_LIST_HEAD_HANDLE pClientListHead = &(pDevNode->stRtspClientHead);
-
 	pClientListHead->iStartThreadFlag = 1;
-	HB_S32 read_video_data_node_task_flag = 0;
 
-    //Input AVFormatContext and Output AVFormatContext
-    AVFormatContext *in_fmt_ctx_v = avformat_alloc_context();
+	time_t  time_now = time(NULL);;
+
+	HB_S32 read_video_data_node_task_flag = 0;
     int ret, i;
     int videoindex_v=-1;
     int audioindex_a=-1;
+
+    //Input AVFormatContext and Output AVFormatContext
+    AVFormatContext *in_fmt_ctx_v = avformat_alloc_context();
+    in_fmt_ctx_v->interrupt_callback.callback = interrupt_cb; //--------注册回调函数,用于控制av_read_frame的超时
+    in_fmt_ctx_v->interrupt_callback.opaque = &time_now;
+
+
 	AVDictionary* options = NULL;
     //设置rtsp传输模式为tcp
     av_dict_set(&options, "rtsp_transport", "tcp", 0);
+    av_dict_set(&options, "stimeout", "10000000", 0);
     ret = avformat_open_input(&in_fmt_ctx_v, pDevNode->arrDevRtspUrl, NULL, &options);
     if(ret != 0)
     {
@@ -356,13 +381,14 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
     	if(pClientListHead->iClientNum < 1)
     	{
     		printf("p_ClientListHead->i_ClientNum=[%d]\n", pClientListHead->iClientNum);
-    		goto End;
+    		break;
     	}
     	AVPacket *p_pkt = (AVPacket*)malloc(sizeof(AVPacket));
         av_init_packet(p_pkt);
 
 		if(av_read_frame(in_fmt_ctx_v, p_pkt) >= 0)
 		{
+			time(&time_now);
 			if(videoindex_v == p_pkt->stream_index)//视频帧
 			{
 				if(1 == p_pkt->flags)//I帧
@@ -418,6 +444,15 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 		else
 		{
 			printf("av_read_frame() failed!\n");
+//			iAvReadFrameFailedNum++;
+//			if (iAvReadFrameFailedNum < 25)
+//			{
+//				//连续错误小于25帧视为正常丢帧
+//				continue;
+//			}
+			pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
+			destory_client_list(pClientListHead);
+			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 			break;
 		}
     }
@@ -427,6 +462,7 @@ End:
 	if(1 == read_video_data_node_task_flag)
 	{
 		printf("join send thread!\n");
+		read_video_data_node_task_flag = 0;
 		pthread_mutex_lock(&(pClientListHead->stVideoDataList.list_mutex));
 		pthread_cond_signal(&(pClientListHead->stVideoDataList.list_empty));
 		pthread_mutex_unlock(&(pClientListHead->stVideoDataList.list_mutex));
@@ -442,7 +478,8 @@ End:
 	pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 
 	TRACE_BLUE("read video thread exit!\n");
-    return NULL;
+	pthread_exit(NULL);
+//    return NULL;
 }
 #endif
 /***********************视频流传输END***********************/

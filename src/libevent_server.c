@@ -155,6 +155,12 @@ static HB_VOID connect_to_rtsp_server_event_cb(struct bufferevent *pConnectRtspS
 	{
 		TRACE_GREEN("连接rtsp服务器成功！！！！！！！！！！！");
 
+//		struct timeval tv_w;
+//		//设置写超时，5秒内未发送数据则断开连接
+//		tv_w.tv_sec  = 5;
+//		tv_w.tv_usec = 0;
+//		bufferevent_set_timeouts(pConnectRtspServerBev, &tv_w, &tv_w);
+
 		//连接成功创建客户节点
 		CLIENT_LIST_HANDLE pClientNode = (CLIENT_LIST_HANDLE)malloc(sizeof(CLIENT_LIST_OBJ));
 		pClientNode->pSendVideoToServerEvent = pConnectRtspServerBev;
@@ -175,6 +181,7 @@ static HB_VOID connect_to_rtsp_server_event_cb(struct bufferevent *pConnectRtspS
 		LIBEVENT_ARGS_DEV_HANDLE pMessengerArgsDev = (LIBEVENT_ARGS_DEV_HANDLE)malloc(sizeof(LIBEVENT_ARGS_DEV_OBJ));
 		pMessengerArgsDev->pDevNode = pDevNode;
 		pMessengerArgsDev->pClientNode = pClientNode;
+
 		//设置连接出错后的回调函数
 		bufferevent_setcb(pConnectRtspServerBev, NULL, NULL, send_rtsp_to_server_event_error_cb, (HB_VOID *)pMessengerArgsDev);
 		bufferevent_enable(pConnectRtspServerBev, EV_WRITE);

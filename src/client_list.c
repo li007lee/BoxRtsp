@@ -6,6 +6,7 @@
  */
 
 #include "client_list.h"
+#include "event2/bufferevent.h"
 
 /*
  *	Function: 向用户链表中插入节点
@@ -103,6 +104,11 @@ HB_VOID destory_client_list(CLIENT_LIST_HEAD_HANDLE p_ClientListHead)
 {
 	while(p_ClientListHead->pClientListFirst != NULL)
 	{
+		if (p_ClientListHead->pClientListFirst->pSendVideoToServerEvent != NULL)
+		{
+			bufferevent_free(p_ClientListHead->pClientListFirst->pSendVideoToServerEvent);
+			p_ClientListHead->pClientListFirst->pSendVideoToServerEvent = NULL;
+		}
 		del_one_client(p_ClientListHead, p_ClientListHead->pClientListFirst);
 	}
 

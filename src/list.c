@@ -55,6 +55,7 @@ HB_VOID list_destroy(LIST_HANDLE plist)
 	}
 	list_reset(plist);
 	free(plist);
+	plist = NULL;
 }
 
 /////////////////////////////////////////////////////////////////////////////////

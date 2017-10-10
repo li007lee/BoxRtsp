@@ -260,7 +260,6 @@ static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
 		while(pIndexClientNode != NULL)
 		{
 			pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
-//			pthread_mutex_lock(&(pRtspClientHead->mutexClientListMutex));
 			if (pIndexClientNode->iDelFlag == 1)
 			{
 				pTmpClientNode = pIndexClientNode->pNext;
@@ -278,7 +277,6 @@ static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
 				bufferevent_write(pIndexClientNode->pSendVideoToServerEvent, pkt->data, pkt->size);
 				pIndexClientNode = pIndexClientNode->pNext;
 			}
-//			pthread_mutex_unlock(&(pRtspClientHead->mutexClientListMutex));
 			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 		}
 
@@ -333,14 +331,14 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 	AVDictionary* options = NULL;
     //设置rtsp传输模式为tcp
     av_dict_set(&options, "rtsp_transport", "tcp", 0);
-    av_dict_set(&options, "stimeout", "10000000", 0);
+//    av_dict_set(&options, "stimeout", "10000000", 0);
     ret = avformat_open_input(&in_fmt_ctx_v, pDevNode->arrDevRtspUrl, NULL, &options);
     if(ret != 0)
     {
     	ret = avformat_open_input(&in_fmt_ctx_v, pDevNode->arrDevRtspUrl, NULL, NULL);
         if(ret != 0)
         {
-			printf("\n0000000000000 ret=%d\n", ret);
+			printf("\n0000000000000avformat_open_input failed ret=%d\n", ret);
 			av_dict_free(&options);
 			goto End;
         }
@@ -348,7 +346,7 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
     }
     av_dict_free(&options);
 
-    printf("Open rtsp succeed!\n");
+//    printf("Open rtsp succeed!\n");
     for (i = 0; i < in_fmt_ctx_v->nb_streams; i++)
     {
         //Create output AVStream according to input AVStream
@@ -362,17 +360,13 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 //    	av_codec_set_pkt_timebase(codec_ctx, stream->time_base);
     	if(codec_ctx->codec_type==AVMEDIA_TYPE_VIDEO)
         {
-			AVStream *in_stream = in_fmt_ctx_v->streams[i];
-			printf("\nBBBBBBBBB   [frame rate = %lf]  [%d*%d]\n", \
-					(in_stream->avg_frame_rate.num/(double)(in_stream->avg_frame_rate.den)), \
-					codec_ctx->width, codec_ctx->height);
+//			AVStream *in_stream = in_fmt_ctx_v->streams[i];
+//			printf("\nBBBBBBBBB   [frame rate = %lf]  [%d*%d]\n", (in_stream->avg_frame_rate.num/(double)(in_stream->avg_frame_rate.den)), codec_ctx->width, codec_ctx->height);
 			videoindex_v=i;
-			//break;
         }
         else if(codec_ctx->codec_type==AVMEDIA_TYPE_AUDIO)
         {
 			audioindex_a=i;
-			//break;
         }
     	avcodec_free_context(&codec_ctx);
     	codec_ctx = NULL;
@@ -490,7 +484,6 @@ End:
 
 	TRACE_BLUE("read video thread exit!\n");
 	pthread_exit(NULL);
-//    return NULL;
 }
 #endif
 /***********************视频流传输END***********************/

@@ -40,8 +40,6 @@ typedef struct CLIENT_LIST_HEAD
 	CLIENT_LIST_HANDLE pClientListFirst;//第一个客户节点
 	CLIENT_LIST_HANDLE pClientListLast;//最后一个客户节点
 
-//	pthread_mutex_t	mutexClientListMutex;	 //客户链表互斥锁
-
 }CLIENT_LIST_HEAD_OBJ, *CLIENT_LIST_HEAD_HANDLE;
 
 

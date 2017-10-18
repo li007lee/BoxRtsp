@@ -20,9 +20,12 @@ struct event_base *pEventBase;
 static HB_S32 load_device_ip_port_cb( HB_VOID * para, HB_S32 n_column, HB_CHAR ** column_value, HB_CHAR ** column_name )
 {
 	DEV_LIST_HANDLE pDevNode = (DEV_LIST_HANDLE)para;
-
 	strncpy(pDevNode->arrDevIp, column_value[0], strlen(column_value[0]));
 	pDevNode->iDevRtspPort = atoi(column_value[1]);
+	strncpy(pDevNode->arrDevRtspUrl, column_value[2], strlen(column_value[2]));
+	strncpy(pDevNode->arrUserName, column_value[3], strlen(column_value[3]));
+	strncpy(pDevNode->arrUserPasswd, column_value[4], strlen(column_value[4]));
+	strncpy(pDevNode->arrBasicAuthenticate, column_value[5], strlen(column_value[5]));
 
 	return 0;
 }
@@ -101,10 +104,8 @@ static HB_VOID send_rtsp_to_server_event_error_cb(struct bufferevent *connect_rt
 			if (pClientNode != NULL)
 			{
 				printf("del one dev from dev_list!\n");
-//				pthread_mutex_lock(&(pRtspClientHead->mutexClientListMutex));
 				del_one_client(pRtspClientHead, pClientNode);
 				pMessengerArgsDev->pClientNode = NULL;
-//				pthread_mutex_unlock(&(pRtspClientHead->mutexClientListMutex));
 			}
 
 			if ((pMessengerArgsDev->pDevNode != NULL) && (pMessengerArgsDev->pDevNode->stRtspClientHead.iClientNum < 1))
@@ -154,24 +155,14 @@ static HB_VOID connect_to_rtsp_server_event_cb(struct bufferevent *pConnectRtspS
 	if (what & BEV_EVENT_CONNECTED)//盒子主动连接rtsp服务器成功
 	{
 		TRACE_GREEN("连接rtsp服务器成功！！！！！！！！！！！");
-
-//		struct timeval tv_w;
-//		//设置写超时，5秒内未发送数据则断开连接
-//		tv_w.tv_sec  = 5;
-//		tv_w.tv_usec = 0;
-//		bufferevent_set_timeouts(pConnectRtspServerBev, &tv_w, &tv_w);
-
 		//连接成功创建客户节点
 		CLIENT_LIST_HANDLE pClientNode = (CLIENT_LIST_HANDLE)malloc(sizeof(CLIENT_LIST_OBJ));
 		pClientNode->pSendVideoToServerEvent = pConnectRtspServerBev;
 
 		pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
-//		pthread_mutex_lock(&(pRtspClientHead->mutexClientListMutex));
-//		pMessengerArgs->del_flag = 0;
-
 		//插入链表
 		add_client_in_tail(pRtspClientHead, pClientNode);
-		TRACE_GREEN("add client add client add client!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+//		TRACE_GREEN("add client add client add client!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 		//启动读取视频流线程
 		if (pRtspClientHead->iStartThreadFlag == 0)
 		{
@@ -185,7 +176,6 @@ static HB_VOID connect_to_rtsp_server_event_cb(struct bufferevent *pConnectRtspS
 		//设置连接出错后的回调函数
 		bufferevent_setcb(pConnectRtspServerBev, NULL, NULL, send_rtsp_to_server_event_error_cb, (HB_VOID *)pMessengerArgsDev);
 		bufferevent_enable(pConnectRtspServerBev, EV_WRITE);
-//		pthread_mutex_unlock(&(pRtspClientHead->mutexClientListMutex));
 		pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 	}
 	else  //盒子connect rtsp服务器失败
@@ -257,7 +247,6 @@ static HB_VOID connect_to_rtsp_server(HB_CHAR *pCmdBuf, DEV_LIST_HANDLE pDevNode
 	analysis_json_server_info(pCmdBuf, arrServerIp, &iServerPort);
 	TRACE_GREEN("rtsp_server_ip=[%s]\nrtsp_server_port=[%d]\n", arrServerIp, iServerPort);
 
-//	struct event_base *base = bufferevent_get_base(pMessengerArgs->pClientBev);
 	pSendVideoToServerEvent = bufferevent_socket_new(pEventBase, -1, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS|BEV_OPT_THREADSAFE);
 	bzero(&stServeraddr, sizeof(stServeraddr));
 	stServeraddr.sin_family = AF_INET;
@@ -389,7 +378,7 @@ static HB_S32 analysis_json_dev_info(char *p_SrcJson, char *pDevId, int *pDevChn
 static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientBev)
 {
 	HB_S32 iDevChnl = -1;		//设备通道号
-	HB_S32 iDevStreamType = -1;//主子码流
+	HB_S32 iDevStreamType = -1;//主子码流 0主码流，1子码流
 	DEV_LIST_HANDLE pDevNode = NULL;
 	HB_CHAR accDevId[MAX_DEV_ID_LEN] = {0}; //设备ID
 
@@ -401,12 +390,14 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 	if (pDevNode == NULL)
 	{
 		//未找到设备
-		HB_CHAR sql[512] = {0};
+		HB_CHAR sql[1024] = {0};
 
 		pDevNode = (DEV_LIST_HANDLE)malloc(sizeof(DEV_LIST_OBJ));
 		memset(pDevNode, 0, sizeof(DEV_LIST_OBJ));
 
-		snprintf(sql, sizeof(sql), "select dev_ip,dev_port from device_info where dev_id='%s'", accDevId);
+		snprintf(sql, sizeof(sql), \
+			"select dev_ip,dev_port,rtsp_url,dev_name,dev_passwd,basic_authenticate from device_info where dev_id='%s_%d'", \
+			accDevId, iDevStreamType);
 		if (sql_operation(sql, DEV_DATA_BASE_NAME, load_device_ip_port_cb, (HB_VOID *)pDevNode) < 0)
 		{
 			//数据库操作失败
@@ -432,8 +423,6 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 		pDevNode->iDevStreamType = iDevStreamType;
 		pDevNode->enumDevConnectStatus = CONNECTING;
 
-//		pthread_mutex_init(&(pDevNode->stRtspClientHead.mutexClientListMutex), NULL);
-
 		TRACE_GREEN("dev_id:[%s], dev_chnl:[%d], dev_streadm:[%d], dev_ip:[%s], dev_port:[%d]\n", \
 				pDevNode->pDevId, pDevNode->iDevChnl, pDevNode->iDevStreamType, pDevNode->arrDevIp, \
 				pDevNode->iDevRtspPort);
@@ -446,12 +435,6 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 		add_wait_client_in_tail(&(pDevNode->stWaitClientHead), pNewWaitClientNode);
 		//添加到等待用户链表END
 		pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
-
-//		LIBEVENT_ARGS_HANDLE pMessengerArgs = (LIBEVENT_ARGS_HANDLE)malloc(sizeof(LIBEVENT_ARGS_OBJ));
-//		memset(pMessengerArgs, 0, sizeof(LIBEVENT_ARGS_OBJ));
-//		pMessengerArgs->pDevNode = pDevNode;//livevent参数结构体中记录当前设备的地址
-//		pMessengerArgs->pClientBev = pClientBev;
-//		test_dev_connection(pMessengerArgs);
 		test_dev_connection(pDevNode);
 	}
 	else
@@ -477,16 +460,12 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 		}
 		else if(pDevNode->enumDevConnectStatus == CONNECTING) //连接中
 		{
-			printf("11111111111111111111111111111111111111111111111111111111111\n");
 			WAIT_CLIENT_LIST_HANDLE pNewWaitClientNode = (WAIT_CLIENT_LIST_HANDLE)malloc(sizeof(WAIT_CLIENT_LIST_OBJ));
 			memset(pNewWaitClientNode, 0, sizeof(WAIT_CLIENT_LIST_OBJ));
 
 			pNewWaitClientNode->pWaitClientBev = pClientBev;
-
 			//如果设备还在连接中，将设备插入等待链表
-//			pthread_mutex_lock(&(pDevNode->stWaitClientHead.mutexWaitClientListMutex));
 			add_wait_client_in_tail(&(pDevNode->stWaitClientHead), pNewWaitClientNode);
-//			pthread_mutex_unlock(&(pDevNode->stWaitClientHead.mutexWaitClientListMutex));
 		}
 		pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 	}

@@ -93,7 +93,7 @@ static void read_dev_sdp_cb(struct bufferevent *connect_dev_bev, void *arg)
 {
 	DEV_LIST_HANDLE pDevNode = (DEV_LIST_HANDLE)arg;
 	BOX_CTRL_CMD_OBJ st_MsgHead;
-	HB_CHAR arr_RecvBuf[2048] = {0};
+	HB_CHAR arr_RecvBuf[10240] = {0};
 	HB_CHAR arr_SendBuf[2048] = {0};
 
 	bufferevent_read(connect_dev_bev, arr_RecvBuf, sizeof(arr_RecvBuf));
@@ -102,6 +102,7 @@ static void read_dev_sdp_cb(struct bufferevent *connect_dev_bev, void *arg)
 
 	analysis_sdp_info(arr_RecvBuf, pDevNode);
 
+//	printf("=============sdp[%d]: [%s]\n", ret, arr_RecvBuf);
 	memset(&st_MsgHead, 0, sizeof(st_MsgHead));
 	memcpy(st_MsgHead.header, "hBzHbox@", 8);
 	st_MsgHead.cmd_code = CMD_OK;
@@ -111,6 +112,7 @@ static void read_dev_sdp_cb(struct bufferevent *connect_dev_bev, void *arg)
 			"{\"CmdType\":\"sdp_info\",\"m_video\":\"%s\",\"a_rtpmap_video\":\"%s\",\"a_fmtp_video\":\"%s\",\"m_audio\":\"%s\",\"a_rtpmap_audio\":\"%s\"}", \
 			pDevNode->m_video, pDevNode->a_rtpmap_video, pDevNode->a_fmtp_video, pDevNode->m_audio, pDevNode->a_rtpmap_audio);
 
+//	printf("sdp:[%s]\n", arr_SendBuf+sizeof(BOX_CTRL_CMD_OBJ));
 	st_MsgHead.cmd_length = strlen(arr_SendBuf+sizeof(BOX_CTRL_CMD_OBJ));
 	pDevNode->enumDevConnectStatus = CONNECTED;//设置为设备已连接状态
 
@@ -129,20 +131,23 @@ static void read_dev_sdp_cb(struct bufferevent *connect_dev_bev, void *arg)
 }
 
 
+
+
 static HB_VOID active_connect_eventcb(struct bufferevent *connect_dev_bev, HB_S16 what, HB_VOID *arg)
 {
 	DEV_LIST_HANDLE pDevNode = (DEV_LIST_HANDLE)arg;
 
 	if (what & BEV_EVENT_CONNECTED)//盒子主动connect设备成功
 	{
-		HB_CHAR arr_Discribe[512] = {0};
-		snprintf(arr_Discribe, sizeof(arr_Discribe), "DESCRIBE %s RTSP/1.0\r\nCSeq: 3\r\nAccept: application/sdp\r\n", pDevNode->arrDevRtspUrl);
-//		char *discribe = "DESCRIBE rtsp://10.7.126.242:8554/cam/realmonitor?channel=1&subtype=0 RTSP/1.0\r\nCSeq: 4\r\nAuthorization: Basic YWRtaW46MTIzNDU2\r\nUser-Agent: LibVLC/2.2.4 (LIVE555 Streaming Media v2016.02.22)\r\nAccept: application/sdp\r\n\r\n";
-//		printf("describe : [%s]\n", arr_Discribe);
-		TRACE_GREEN("\n############  connect dev successful and start to get dev SDP !\n");
+		//连接设备成功发送describe获取sdp信息
+		HB_CHAR arr_Discribe[1024] = {0};
 
-		bufferevent_write(connect_dev_bev, arr_Discribe, strlen(arr_Discribe)+1);
-		bufferevent_enable(connect_dev_bev, EV_WRITE);
+		snprintf(arr_Discribe, sizeof(arr_Discribe), \
+			"DESCRIBE %s RTSP/1.0\r\nCSeq: 3\r\nAccept: application/sdp\r\nAuthorization: Basic %s\r\n\r\n", \
+			pDevNode->arrDevRtspUrl, pDevNode->arrBasicAuthenticate);
+
+		TRACE_GREEN("\n############  connect dev successful and start to get dev SDP !\n");
+		bufferevent_write(connect_dev_bev, arr_Discribe, strlen(arr_Discribe));
 	}
 	else
 	{
@@ -174,31 +179,29 @@ static HB_VOID active_connect_eventcb(struct bufferevent *connect_dev_bev, HB_S1
  *
  * Return : 无
  */
-//HB_VOID test_dev_connection(LIBEVENT_ARGS_HANDLE pMessengerArgs)
 HB_VOID test_dev_connection(DEV_LIST_HANDLE pDevNode)
 {
-	const char *in_filename_v = "rtsp://admin:888888@192.168.8.21:8554/H264MainStream";//汉邦ipc
-	//const char *in_filename_v = "rtsp://admin:admin@192.168.8.198:554/video1";//宇视ipc video1-主码流 video2-辅码流 video3-第三码流
-	//const char *in_filename_v = "rtsp://admin:123456@10.7.126.242:8554/cam/realmonitor?channel=1&subtype=0";//大华
-	//const char *in_filename_v = "rtsp://admin:a1234567@10.6.209.93:9020/h264/ch1/main/av_stream";//海康
-
+	struct timeval tv_read; //读超时
+//	const char *in_filename_v = "rtsp://admin:888888@192.168.8.21:8554/H264MainStream";//汉邦ipc
+//	const char *in_filename_v = "rtsp://admin:admin@192.168.8.198:554/video1";//宇视ipc video1-主码流 video2-辅码流 video3-第三码流
+//	const char *in_filename_v = "rtsp://admin:123456@10.7.126.242:8554/cam/realmonitor?channel=1&subtype=0";//大华
+//	const char *in_filename_v = "rtsp://admin:admin12345@192.168.8.64:10001/Streaming/Channels/101?transportmode=unicast&amp;profile=Profile_1893387798";//海康
 	struct sockaddr_in connect_to_addr;
 	struct bufferevent *connect_dev_bev = bufferevent_socket_new(pEventBase, -1, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS|BEV_OPT_THREADSAFE);
-//	printf("bufferevent_get_enabled(connect_dev_bev):[%d]\n", bufferevent_get_enabled(connect_dev_bev));
+
+	tv_read.tv_sec  = 5;
+	tv_read.tv_usec = 0;
 
 	bzero(&connect_to_addr, sizeof(connect_to_addr));
 	connect_to_addr.sin_family = AF_INET;
 	connect_to_addr.sin_port = htons(pDevNode->iDevRtspPort);
 	inet_pton(AF_INET, pDevNode->arrDevIp, (void *)&connect_to_addr.sin_addr);
+	printf("pDevNode->arrDevIp[%s], pDevNode->port[%d]\n", pDevNode->arrDevIp, pDevNode->iDevRtspPort);
 
-	snprintf(pDevNode->arrDevRtspUrl, sizeof(pDevNode->arrDevRtspUrl), "%s", in_filename_v);
-    struct timeval tv_w;
-	tv_w.tv_sec  = 5;
-	tv_w.tv_usec = 0;
-	bufferevent_set_timeouts(connect_dev_bev, &tv_w, NULL);
+	bufferevent_set_timeouts(connect_dev_bev, &tv_read, NULL);
 	bufferevent_socket_connect(connect_dev_bev, (struct sockaddr*)&connect_to_addr, sizeof(struct sockaddr_in));
 	bufferevent_setcb(connect_dev_bev, read_dev_sdp_cb, NULL, active_connect_eventcb, (HB_VOID *)pDevNode);
-    bufferevent_enable(connect_dev_bev, EV_READ);
+    bufferevent_enable(connect_dev_bev, EV_READ|EV_WRITE);
 }
 /***********************测试设备连通性END***********************/
 /***********************测试设备连通性END***********************/
@@ -212,7 +215,6 @@ HB_VOID test_dev_connection(DEV_LIST_HANDLE pDevNode)
 #if 1
 static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
 {
-	TRACE_LOG("send_video_data_to_rtsp_task start!");
 	DEV_LIST_HANDLE pDevNode = (DEV_LIST_HANDLE)param;
 	CLIENT_LIST_HEAD_HANDLE pRtspClientHead = &(pDevNode->stRtspClientHead);
 	CLIENT_LIST_HANDLE pIndexClientNode = NULL;
@@ -313,6 +315,7 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 	pthread_detach(pthread_self());
 	DEV_LIST_HANDLE pDevNode = (DEV_LIST_HANDLE)arg;
 	CLIENT_LIST_HEAD_HANDLE pClientListHead = &(pDevNode->stRtspClientHead);
+	HB_CHAR arrOpenRtspUrl[1024] = {0};
 	pClientListHead->iStartThreadFlag = 1;
 
 	time_t  time_now = time(NULL);;
@@ -331,8 +334,10 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 	AVDictionary* options = NULL;
     //设置rtsp传输模式为tcp
     av_dict_set(&options, "rtsp_transport", "tcp", 0);
-//    av_dict_set(&options, "stimeout", "10000000", 0);
-    ret = avformat_open_input(&in_fmt_ctx_v, pDevNode->arrDevRtspUrl, NULL, &options);
+    snprintf(arrOpenRtspUrl, sizeof(arrOpenRtspUrl), "rtsp://%s:%s@%s", \
+    	pDevNode->arrUserName, pDevNode->arrUserPasswd, pDevNode->arrDevRtspUrl+strlen("rtsp://"));
+    printf("OpenRtspUrl[%s]\n", arrOpenRtspUrl);
+    ret = avformat_open_input(&in_fmt_ctx_v, arrOpenRtspUrl, NULL, &options);
     if(ret != 0)
     {
     	ret = avformat_open_input(&in_fmt_ctx_v, pDevNode->arrDevRtspUrl, NULL, NULL);
@@ -346,7 +351,6 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
     }
     av_dict_free(&options);
 
-//    printf("Open rtsp succeed!\n");
     for (i = 0; i < in_fmt_ctx_v->nb_streams; i++)
     {
         //Create output AVStream according to input AVStream
@@ -375,12 +379,11 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
     video_data_list_init(&(pClientListHead->stVideoDataList));
 
 #if 1
-	//pthread_create(&p_ClientListHead->thread_SendVideo_id, NULL, send_video_data_to_rtsp_task, (HB_VOID*)p_CommunicateTags);
     pthread_create(&(pClientListHead->threadSendVideoId), NULL, send_video_data_to_rtsp_task, (HB_VOID*)pDevNode);
 	read_video_data_node_task_flag = 1;
-	printf("\n#########  pthread id = %lu\n", pClientListHead->threadSendVideoId);
 #endif
-    HB_S32 I_flag = 0;
+//    HB_S32 I_flag = 0;
+    HB_S32 iFirstIFlag = 1; //由于第一个I帧的pts经常出错，此变量用于忽略第一个I帧
     while (1)
     {
     	if(pClientListHead->iClientNum < 1)
@@ -398,32 +401,38 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 			{
 				if(1 == p_pkt->flags)//I帧
 				{
-					I_flag = 1;
-					//printf("total client [%d]\n", p_ClientListHead->i_ClientNum);
-					printf("\nVIDEO VIDEOframe type=%d duration=%lld pts=%lld\n", p_pkt->flags, p_pkt->duration, p_pkt->pts);
+//					I_flag = 1;
+					if (iFirstIFlag)
+					{
+						iFirstIFlag = 0;
+						printf("\nI don't send !!!VIDEO VIDEOframe type=%d duration=%lld pts=%llu\n", p_pkt->flags, p_pkt->duration, p_pkt->pts);
+						av_packet_free(&p_pkt);
+						continue;
+					}
+					printf("\nVIDEO VIDEOframe type=%d duration=%lld pts=%llu\n", p_pkt->flags, p_pkt->duration, p_pkt->pts);
 				}
-				else if (0 == I_flag)//第一个I帧来之前BP帧全部丢弃
+//				else if (0 == I_flag)//第二个I帧来之前BP帧全部丢弃
+				else if (iFirstIFlag)//第二个I帧来之前BP帧全部丢弃
 				{
 					av_packet_free(&p_pkt);
 					continue;
 				}
-				//printf("\nVIDEO VIDEO VIDEO VIDEO  frame type=%d duration=%lld pts=%lld\n", p_pkt->flags, p_pkt->duration, p_pkt->pts);
-				//frame_type = 0;
+//				printf("\nVIDEO VIDEO VIDEO VIDEO  frame type=%d duration=%lld pts=%lld\n", p_pkt->flags, p_pkt->duration, p_pkt->pts);
 			}
 			else if (audioindex_a == p_pkt->stream_index)//音频帧
 			{
 				av_packet_free(&p_pkt);
 				continue;
-				//第一个I帧来之前，音频也不播放
+//				//第一个I帧来之前，音频也不播放
 //				if(0 == I_flag)
 //				{
 //					av_packet_free(&p_pkt);
 //					continue;
 //				}
-				//frame_type = 1;
-				//printf("\nAUDIO AUDIO AUDIO AUDIO  frame type=%d duration=%lld pts=%lld\n", p_pkt->flags, p_pkt->duration, p_pkt->pts);
-				//av_packet_free(&p_pkt);
-				//continue;
+//				frame_type = 1;
+//				printf("\nAUDIO AUDIO AUDIO AUDIO  frame type=%d duration=%lld pts=%lld\n", p_pkt->flags, p_pkt->duration, p_pkt->pts);
+//				av_packet_free(&p_pkt);
+//				continue;
 			}
 			else	//其它类型帧直接忽略
 			{
@@ -449,12 +458,6 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 		else
 		{
 			printf("av_read_frame() failed!\n");
-//			iAvReadFrameFailedNum++;
-//			if (iAvReadFrameFailedNum < 25)
-//			{
-//				//连续错误小于25帧视为正常丢帧
-//				continue;
-//			}
 			pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
 			destory_client_list(pClientListHead);
 			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
@@ -463,6 +466,7 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
     }
 
 End:
+	printf("avformat_close_input\n");
 	avformat_close_input(&in_fmt_ctx_v);
 	if(1 == read_video_data_node_task_flag)
 	{

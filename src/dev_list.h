@@ -32,6 +32,9 @@ typedef struct _tagDEV_LIST
 	HB_CHAR arrDevIp[16];	//设备ip
 	HB_S32	iDevRtspPort;		//设备rtsp端口
 	HB_CHAR arrDevRtspUrl[512]; //设备rtsp地址
+	HB_CHAR arrUserName[64];	//设备用户名
+	HB_CHAR arrUserPasswd[64];	//设备密码
+	HB_CHAR arrBasicAuthenticate[128]; //基本认证
 
 	/*************视频sdp信息*************/
 	HB_CHAR m_video[64];

@@ -54,6 +54,7 @@ typedef struct _tagBOX_CTRL_CMD
 	DATA_TYPE_E data_type;
 	CMD_TYPE_E cmd_type;//信令类型
 	CMD_CODE_E cmd_code;
+	HB_S64	pts;
 }BOX_CTRL_CMD_OBJ, *BOX_CTRL_CMD_HANDLE;
 
 

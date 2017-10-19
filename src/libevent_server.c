@@ -604,7 +604,6 @@ HB_VOID libevent_server_main_listen()
 	pListener = evconnlistener_new_bind(pEventBase, accept_client_connect_cb, NULL,
 			LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_REUSEABLE|LEV_OPT_THREADSAFE,
 			1024, (struct sockaddr*)&stListenAddr, sizeof(struct sockaddr_in));
-	printf("start listening : \n");
 	event_base_dispatch(pEventBase);
 	evconnlistener_free(pListener);
 	event_base_free(pEventBase);

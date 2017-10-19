@@ -112,7 +112,6 @@ static void read_dev_sdp_cb(struct bufferevent *connect_dev_bev, void *arg)
 			"{\"CmdType\":\"sdp_info\",\"m_video\":\"%s\",\"a_rtpmap_video\":\"%s\",\"a_fmtp_video\":\"%s\",\"m_audio\":\"%s\",\"a_rtpmap_audio\":\"%s\"}", \
 			pDevNode->m_video, pDevNode->a_rtpmap_video, pDevNode->a_fmtp_video, pDevNode->m_audio, pDevNode->a_rtpmap_audio);
 
-//	printf("sdp:[%s]\n", arr_SendBuf+sizeof(BOX_CTRL_CMD_OBJ));
 	st_MsgHead.cmd_length = strlen(arr_SendBuf+sizeof(BOX_CTRL_CMD_OBJ));
 	pDevNode->enumDevConnectStatus = CONNECTED;//设置为设备已连接状态
 
@@ -257,8 +256,9 @@ static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
 			send_cmd.data_type = BP_FRAME;
 		}
 		send_cmd.cmd_length = pkt->size;
-
+		send_cmd.pts = pkt->pts;
 		pIndexClientNode = pRtspClientHead->pClientListFirst;
+
 		while(pIndexClientNode != NULL)
 		{
 			pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
@@ -405,11 +405,11 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 					if (iFirstIFlag)
 					{
 						iFirstIFlag = 0;
-						printf("\nI don't send !!!VIDEO VIDEOframe type=%d duration=%lld pts=%llu\n", p_pkt->flags, p_pkt->duration, p_pkt->pts);
+//						printf("\nI don't send !!!VIDEO VIDEOframe type=%d duration=%lld pts=%llu\n", p_pkt->flags, p_pkt->duration, p_pkt->pts);
 						av_packet_free(&p_pkt);
 						continue;
 					}
-					printf("\nVIDEO VIDEOframe type=%d duration=%lld pts=%llu\n", p_pkt->flags, p_pkt->duration, p_pkt->pts);
+//					printf("\nVIDEO VIDEOframe type=%d duration=%lld pts=%llu\n", p_pkt->flags, p_pkt->duration, p_pkt->pts);
 				}
 //				else if (0 == I_flag)//第二个I帧来之前BP帧全部丢弃
 				else if (iFirstIFlag)//第二个I帧来之前BP帧全部丢弃
@@ -417,7 +417,7 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 					av_packet_free(&p_pkt);
 					continue;
 				}
-//				printf("\nVIDEO VIDEO VIDEO VIDEO  frame type=%d duration=%lld pts=%lld\n", p_pkt->flags, p_pkt->duration, p_pkt->pts);
+				printf("\nVIDEO VIDEO VIDEO VIDEO  frame type=%d duration=%llu pts=%llu\n", p_pkt->flags, p_pkt->duration, p_pkt->pts);
 			}
 			else if (audioindex_a == p_pkt->stream_index)//音频帧
 			{

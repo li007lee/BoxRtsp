@@ -448,13 +448,13 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 			memcpy(st_MsgHead.header, "hBzHbox@", 8);
 			st_MsgHead.cmd_code = CMD_OK;
 
-			memcpy(arr_SendBuf, &st_MsgHead, sizeof(BOX_CTRL_CMD_OBJ));
 			snprintf(arr_SendBuf+sizeof(BOX_CTRL_CMD_OBJ), 2048-sizeof(BOX_CTRL_CMD_OBJ), \
 					"{\"CmdType\":\"sdp_info\",\"m_video\":\"%s\",\"a_rtpmap_video\":\"%s\",\"a_fmtp_video\":\"%s\",\"m_audio\":\"%s\",\"a_rtpmap_audio\":\"%s\"}", \
 					pDevNode->m_video, pDevNode->a_rtpmap_video, pDevNode->a_fmtp_video, pDevNode->m_audio, pDevNode->a_rtpmap_audio);
 			st_MsgHead.cmd_length = strlen(arr_SendBuf+sizeof(BOX_CTRL_CMD_OBJ));
+			memcpy(arr_SendBuf, &st_MsgHead, sizeof(BOX_CTRL_CMD_OBJ));
+
 			bufferevent_write(pClientBev, arr_SendBuf, st_MsgHead.cmd_length+sizeof(BOX_CTRL_CMD_OBJ));
-//			bufferevent_setcb(pClientBev, deal_client_cmd, NULL, deal_client_cmd_error_cb2, (HB_VOID *)pDevNode);
 			bufferevent_setcb(pClientBev, deal_client_cmd, NULL, NULL, (HB_VOID *)pDevNode);
 			bufferevent_enable(pClientBev, EV_READ);
 		}

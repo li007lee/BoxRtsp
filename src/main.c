@@ -13,7 +13,17 @@
 
 int main()
 {
+	int ret = 0;
 	signal(SIGPIPE, SIG_IGN);
+	sigset_t signal_mask;
+	sigemptyset (&signal_mask);
+	sigaddset (&signal_mask, SIGPIPE);
+	ret = pthread_sigmask (SIG_BLOCK, &signal_mask, NULL);
+	if (ret != 0)
+	{
+		TRACE_ERR("###### block sigpipe error!\n");
+		return HB_FAILURE;
+	}
 
 	av_register_all();
 	avformat_network_init();

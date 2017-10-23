@@ -82,6 +82,69 @@ static void analysis_sdp_info(HB_CHAR *p_SdpBuf, DEV_LIST_HANDLE p_DevNode)
 
 
 /*
+ *	Function: 处理与客户端信令交互时产生的异常和错误(第二次信令交互)
+ *
+ *	@param bev: 异常产生的事件句柄
+ *	@param events: 异常事件类型
+ *  @parmm args	: 实际为DEV_LIST_HANDLE类型的参数结构体
+ *
+ *	Retrun: 无
+ */
+static HB_VOID deal_client_cmd_error_cb2(struct bufferevent *bev, short events, void *arg)
+{
+	DEV_LIST_HANDLE pDevNode = (DEV_LIST_HANDLE)arg;
+
+	bufferevent_disable(bev, EV_READ|EV_WRITE);
+
+	if (events & BEV_EVENT_EOF)//对端关闭
+	{
+		TRACE_ERR("RTSP CMD peer client closed (deal_client_request_error_cb1)!");
+	}
+	else if (events & BEV_EVENT_ERROR)//错误事件
+	{
+		TRACE_ERR("Error from bufferevent (deal_client_request_error_cb1)");
+	}
+	else if (events & BEV_EVENT_TIMEOUT)//超时事件
+	{
+		TRACE_ERR("RTSP CMD (deal_client_request_error_cb1)  timeout !");
+	}
+
+	if ((pDevNode != NULL) && (pDevNode->stRtspClientHead.iClientNum < 1) && (pDevNode->stWaitClientHead.iWaitClientNum < 1))
+	{
+		printf("del one dev from dev_list!\n");
+		pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
+		del_one_from_dev_list(pDevNode);
+		pDevNode = NULL;
+		pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
+	}
+	printf("deal_client_cmd_error_cb2 free bev!\n");
+	bufferevent_free(bev);
+	bev = NULL;
+
+
+//	if (pMessengerArgs->pDevNode != NULL)
+//	{
+//		printf("del one dev from dev_list!\n");
+//		pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
+//		del_one_from_dev_list(pMessengerArgs->pDevNode);
+//		pMessengerArgs->pDevNode = NULL;
+//		pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
+//	}
+//	if (pMessengerArgs->pClientBev != NULL)
+//	{
+//		printf("bufferevent_free pClientBev!\n");
+//		bufferevent_free(pMessengerArgs->pClientBev);
+//		pMessengerArgs->pClientBev = NULL;
+//	}
+//	printf("deal_client_cmd_error_cb1 free pMessengerArgs\n");
+//	free(pMessengerArgs);
+//	pMessengerArgs = NULL;
+
+
+}
+
+
+/*
  *	Function: 从设备获取sdp信息并解析
  *
  *	@param bev: 与设备的链接句柄
@@ -107,19 +170,23 @@ static void read_dev_sdp_cb(struct bufferevent *connect_dev_bev, void *arg)
 	memcpy(st_MsgHead.header, "hBzHbox@", 8);
 	st_MsgHead.cmd_code = CMD_OK;
 
-	memcpy(arr_SendBuf, &st_MsgHead, sizeof(BOX_CTRL_CMD_OBJ));
+
 	snprintf(arr_SendBuf+sizeof(BOX_CTRL_CMD_OBJ), 2048-sizeof(BOX_CTRL_CMD_OBJ), \
 			"{\"CmdType\":\"sdp_info\",\"m_video\":\"%s\",\"a_rtpmap_video\":\"%s\",\"a_fmtp_video\":\"%s\",\"m_audio\":\"%s\",\"a_rtpmap_audio\":\"%s\"}", \
 			pDevNode->m_video, pDevNode->a_rtpmap_video, pDevNode->a_fmtp_video, pDevNode->m_audio, pDevNode->a_rtpmap_audio);
 
 	st_MsgHead.cmd_length = strlen(arr_SendBuf+sizeof(BOX_CTRL_CMD_OBJ));
+
+	memcpy(arr_SendBuf, &st_MsgHead, sizeof(BOX_CTRL_CMD_OBJ));
+
+//	printf("st_MsgHead.cmd_length = %d, head_len[%d]\n", st_MsgHead.cmd_length, sizeof(BOX_CTRL_CMD_OBJ));
 	pDevNode->enumDevConnectStatus = CONNECTED;//设置为设备已连接状态
 
 	while(pDevNode->stWaitClientHead.iWaitClientNum > 0)
 	{
 		struct bufferevent *p_AcceptClient_bev = pDevNode->stWaitClientHead.pWaitClientListFirst->pWaitClientBev;
 		bufferevent_write(p_AcceptClient_bev, arr_SendBuf, st_MsgHead.cmd_length+sizeof(BOX_CTRL_CMD_OBJ));
-		bufferevent_setcb(p_AcceptClient_bev, deal_client_cmd, NULL, NULL, (HB_VOID *)pDevNode);
+		bufferevent_setcb(p_AcceptClient_bev, deal_client_cmd, NULL, deal_client_cmd_error_cb2, (HB_VOID *)pDevNode);
 		bufferevent_enable(p_AcceptClient_bev, EV_READ);
 		pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
 		del_one_wait_client(&(pDevNode->stWaitClientHead), pDevNode->stWaitClientHead.pWaitClientListFirst);
@@ -221,6 +288,7 @@ static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
 	BOX_CTRL_CMD_OBJ send_cmd;
 	memset(&send_cmd, 0, sizeof(BOX_CTRL_CMD_OBJ));
 	AVPacket *pkt = NULL;
+
     while(1)
     {
 		if(pRtspClientHead->iClientNum < 1)
@@ -282,7 +350,6 @@ static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
 			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 		}
 
-		pkt = NULL;
 		list_remove_head_node(pRtspClientHead->stVideoDataList.plist);
 		pthread_mutex_unlock(&(pRtspClientHead->stVideoDataList.list_mutex));
     }
@@ -409,6 +476,7 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 						av_packet_free(&p_pkt);
 						continue;
 					}
+//					printf("\nVIDEO VIDEOframe %X %X %X %X \n", p_pkt->data[0], p_pkt->data[1], p_pkt->data[2], p_pkt->data[3]);
 //					printf("\nVIDEO VIDEOframe type=%d duration=%lld pts=%llu\n", p_pkt->flags, p_pkt->duration, p_pkt->pts);
 				}
 //				else if (0 == I_flag)//第二个I帧来之前BP帧全部丢弃
@@ -417,7 +485,7 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 					av_packet_free(&p_pkt);
 					continue;
 				}
-				printf("\nVIDEO VIDEO VIDEO VIDEO  frame type=%d duration=%llu pts=%llu\n", p_pkt->flags, p_pkt->duration, p_pkt->pts);
+//				printf("\nVIDEO VIDEO VIDEO VIDEO  frame type=%d duration=%llu pts=%llu\n", p_pkt->flags, p_pkt->duration, p_pkt->pts);
 			}
 			else if (audioindex_a == p_pkt->stream_index)//音频帧
 			{
@@ -445,7 +513,6 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 			pthread_mutex_lock(&(pClientListHead->stVideoDataList.list_mutex));
 			video_data_node = (LIST_NODE_HANDLE)list_add_node_to_end(pClientListHead->stVideoDataList.plist);
 			video_data_node->p_value = p_pkt;
-			//sonser_data_node->buf_len = sen_data.length;
 			pthread_mutex_unlock(&(pClientListHead->stVideoDataList.list_mutex));
 
 			if(HB_TRUE == pClientListHead->stVideoDataList.b_wait)
@@ -458,6 +525,7 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 		else
 		{
 			printf("av_read_frame() failed!\n");
+			av_packet_free(&p_pkt);
 			pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
 			destory_client_list(pClientListHead);
 			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));

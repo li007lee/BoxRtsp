@@ -13,17 +13,15 @@
 HB_VOID delete_vedio_data_node(HB_VOID *p_node)
 {
 	LIST_NODE_HANDLE handle = (LIST_NODE_HANDLE)p_node;
+//	static int num = 0;
 
 	if (NULL != handle->p_value)
 	{
-		//free(handle->msg_buf);
-		//av_free_packet((AVPacket*)(handle->p_value));
 		av_packet_free((AVPacket**)(&(handle->p_value)));
 		handle->p_value = NULL;
+//		printf("free free free av_packet = %d\n", ++num);
 	}
 
-	//free(handle);
-	//handle = NULL;
 	return;
 }
 

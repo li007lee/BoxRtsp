@@ -201,7 +201,7 @@ HB_S32 del_one_wait_client(WAIT_CLIENT_LIST_HEAD_HANDLE pWaitClientListHead, WAI
 	pWaitClientListHead->iWaitClientNum -= 1;
 	free(pDelNode);
 	pDelNode = NULL;
-	TRACE_YELLOW("total client = %d\n", pWaitClientListHead->iWaitClientNum);
+	TRACE_YELLOW("total wait client = %d\n", pWaitClientListHead->iWaitClientNum);
 
 	return 0;
 }

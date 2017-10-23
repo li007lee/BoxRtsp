@@ -119,16 +119,14 @@ typedef enum _tagHB_BOOL
 
 #define BOX_SERVER_PORT 8109
 #define MAXBUF 1024
-#define DATA_BASE_FILE "../data/dev_manager.db"
-#define DEV_DATA_BASE_NAME "../data/rtsp_dev_manager.db"
+//#define DEV_DATA_BASE_NAME "../data/rtsp_dev_manager.db"
+#define DEV_DATA_BASE_NAME "/home/default/rtsp_dev_manager.db"
 //#define AUTHENTICATE  ture
 
 typedef struct CLIENT {
     int fd;
     struct sockaddr_in addr;
 }CLIENT;
-
-
 
 
 #define DEBUG

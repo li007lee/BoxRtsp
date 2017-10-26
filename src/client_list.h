@@ -19,7 +19,8 @@
 //已经接入的用户的链表
 typedef struct _tagCLIENT_LIST
 {
-	int iDelFlag;//节点删除标志,客户端开连接或者网络异常时会被置位，为1时表明需要删除当前客户节点
+	HB_S32 iDelFlag;//节点删除标志,客户端开连接或者网络异常时会被置位，为1时表明需要删除当前客户节点
+	HB_S64 pts;
 	struct bufferevent *pSendVideoToServerEvent;//主动连接服务器事件（视频流推送事件句柄）
 
 	struct _tagCLIENT_LIST *pPrev;

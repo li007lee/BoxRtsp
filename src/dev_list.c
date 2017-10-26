@@ -104,7 +104,7 @@ HB_S32 del_one_from_dev_list(DEV_LIST_HANDLE pDelNode)
 	free(pDelNode);
 	pDelNode = NULL;
 
-	TRACE_GREEN("Del device! Cur device num [%d]", stDevListHead.iDevNum);
+	TRACE_YELLOW("Del device! Cur device num [%d]", stDevListHead.iDevNum);
 	return HB_SUCCESS;
 }
 

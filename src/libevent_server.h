@@ -55,6 +55,8 @@ typedef struct _tagBOX_CTRL_CMD
 	CMD_TYPE_E cmd_type;//信令类型
 	CMD_CODE_E cmd_code;
 	HB_S64	pts;
+//	HB_U32 uiVideoSec;	//视频当前秒数
+//	HB_U32 uiVideoUsec;	//视频当前微妙数
 }BOX_CTRL_CMD_OBJ, *BOX_CTRL_CMD_HANDLE;
 
 

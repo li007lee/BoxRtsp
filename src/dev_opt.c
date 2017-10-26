@@ -40,7 +40,10 @@ static void analysis_sdp_info(HB_CHAR *p_SdpBuf, DEV_LIST_HANDLE p_DevNode)
 		{
 			p_Pos2 = strstr(p_Pos1, "\r\n");
 			strncpy(p_DevNode->a_rtpmap_video, p_Pos1, p_Pos2-p_Pos1);
-			printf("get a_rtpmap_video:[%s]\n", p_DevNode->a_rtpmap_video);
+			p_Pos2 = strstr(p_Pos1, "/") + 1;
+			p_DevNode->iVideoFrameRate = atoi(p_Pos2);
+
+			printf("get a_rtpmap_video:[%s], FrameRate=[%d]\n", p_DevNode->a_rtpmap_video, p_DevNode->iVideoFrameRate);
 		}
 
 		p_Pos1 = strstr(p_Pos1, "a=fmtp");
@@ -324,7 +327,7 @@ static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
 			send_cmd.data_type = BP_FRAME;
 		}
 		send_cmd.cmd_length = pkt->size;
-		send_cmd.pts = pkt->pts;
+//		send_cmd.pts = pkt->pts;
 		pIndexClientNode = pRtspClientHead->pClientListFirst;
 
 		while(pIndexClientNode != NULL)
@@ -343,6 +346,11 @@ static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
 			}
 			else
 			{
+				pIndexClientNode->pts += pDevNode->iPtsRateInterval;
+				send_cmd.pts = pIndexClientNode->pts;
+//				send_cmd.uiVideoSec = (((HB_U32)(pIndexClientNode->pts))/90)/1000;
+//				send_cmd.uiVideoUsec = (HB_U32)(((pIndexClientNode->pts/90)%1000)*1000);
+//				printf("send_cmd.pts:[%lld]\n", send_cmd.pts);
 				bufferevent_write(pIndexClientNode->pSendVideoToServerEvent, &send_cmd, sizeof(BOX_CTRL_CMD_OBJ));
 				bufferevent_write(pIndexClientNode->pSendVideoToServerEvent, pkt->data, pkt->size);
 				pIndexClientNode = pIndexClientNode->pNext;
@@ -360,18 +368,24 @@ static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
 static int interrupt_cb(void *ctx)
 {
     // do something
-//	AVFormatContext *pFormatCtx = (AVFormatContext *)ctx;
-	time_t *time_last = (time_t *)ctx;
-	time_t time_now = 0;
+	static int count = 0;
 
-	time(&time_now);
-//	printf("time_last=[%ld], time_now=[%ld]\n", *time_last, time_now);
-    if ((time_now-*time_last) > 5)
-    {
-		printf("av_read_frame time out\n");
-		return AVERROR_EOF;//这个就是超时的返回
-//		return 1;
-    }
+	if (count++ > 1000)
+	{
+		count = 0;
+		time_t *time_last = (time_t *)ctx;
+		time_t time_now = 0;
+
+		time(&time_now);
+//		printf("time_last=[%ld], time_now=[%ld]\n", *time_last, time_now);
+		if ((time_now-*time_last) > 5)
+		{
+			printf("av_read_frame time out\n");
+			return AVERROR_EOF;//这个就是超时的返回
+		}
+	}
+
+
 
     return 0;
 }
@@ -384,6 +398,11 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 	CLIENT_LIST_HEAD_HANDLE pClientListHead = &(pDevNode->stRtspClientHead);
 	HB_CHAR arrOpenRtspUrl[1024] = {0};
 	pClientListHead->iStartThreadFlag = 1;
+
+	pthread_t thread_id = pthread_self();
+
+	TRACE_YELLOW("thread_id[%lu]--->dev_id[%s]--->dev_Chnl[%d]--->dev_stream_type[%d]\n", \
+			thread_id, pDevNode->pDevId, pDevNode->iDevChnl, pDevNode->iDevStreamType);
 
 	time_t  time_now = time(NULL);;
 
@@ -442,20 +461,25 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
     	avcodec_free_context(&codec_ctx);
     	codec_ctx = NULL;
     }
-    printf("\n####  open rtsp successful, video_index=%d  audio_index=%d\n", videoindex_v, audioindex_a);
+
+    TRACE_GREEN("\n####  open rtsp successful dev_id[%s]-->dev_Chnl[%d]-->dev_stream_type[%d]\n", \
+    		pDevNode->pDevId, pDevNode->iDevChnl, pDevNode->iDevStreamType);
     video_data_list_init(&(pClientListHead->stVideoDataList));
 
 #if 1
     pthread_create(&(pClientListHead->threadSendVideoId), NULL, send_video_data_to_rtsp_task, (HB_VOID*)pDevNode);
 	read_video_data_node_task_flag = 1;
 #endif
-//    HB_S32 I_flag = 0;
-    HB_S32 iFirstIFlag = 1; //由于第一个I帧的pts经常出错，此变量用于忽略第一个I帧
+//	HB_S32 iIFlag = 0;
+	HB_S64 iIFlag = 0; //由于前几帧的pts经常出错，此变量用于忽略第两个个I帧，从第三I帧开始发送数据
+    HB_S32 iCalcRateIntervalFlag=0;
+    HB_S32 iCount = 0;
+    HB_S64 llPtsOld = 0;
     while (1)
     {
     	if(pClientListHead->iClientNum < 1)
     	{
-    		printf("p_ClientListHead->i_ClientNum=[%d]\n", pClientListHead->iClientNum);
+    		TRACE_YELLOW("p_ClientListHead->i_ClientNum=[%d]\n", pClientListHead->iClientNum);
     		break;
     	}
     	AVPacket *p_pkt = (AVPacket*)malloc(sizeof(AVPacket));
@@ -463,29 +487,56 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 
 		if(av_read_frame(in_fmt_ctx_v, p_pkt) >= 0)
 		{
+//			printf("\n thread:[%lu] VIDEO VIDEO VIDEO VIDEO  frame type=%d duration=%lld pts=%lld\n", thread_id, p_pkt->flags, p_pkt->duration, p_pkt->pts);
+//			printf("\nVIDEO VIDEOframe type=%d duration=%lld pts=%llu\n", p_pkt->flags, p_pkt->duration, p_pkt->pts);
 			time(&time_now);
 			if(videoindex_v == p_pkt->stream_index)//视频帧
 			{
 				if(1 == p_pkt->flags)//I帧
 				{
-//					I_flag = 1;
-					if (iFirstIFlag)
+					iIFlag++;
+					if (iIFlag == 2)
 					{
-						iFirstIFlag = 0;
+						//第二个I帧出现，做一个标记，用来计算帧间隔
+						iCalcRateIntervalFlag = 1;
 //						printf("\nI don't send !!!VIDEO VIDEOframe type=%d duration=%lld pts=%llu\n", p_pkt->flags, p_pkt->duration, p_pkt->pts);
 						av_packet_free(&p_pkt);
 						continue;
 					}
-//					printf("\nVIDEO VIDEOframe %X %X %X %X \n", p_pkt->data[0], p_pkt->data[1], p_pkt->data[2], p_pkt->data[3]);
-//					printf("\nVIDEO VIDEOframe type=%d duration=%lld pts=%llu\n", p_pkt->flags, p_pkt->duration, p_pkt->pts);
+					else if (iIFlag == 3)
+					{
+						//因为是从第三个I帧发送数据，所以开始发送数据帧前计算出pts间隔
+//						printf("llPtsOld=%lld\n", llPtsOld);
+						if (iCount > 0)
+						{
+							pDevNode->iPtsRateInterval = (HB_S32)((p_pkt->pts-llPtsOld)/iCount);
+							iCalcRateIntervalFlag = 0;
+							TRACE_YELLOW("thread_id[%lu]-->dev_id[%s]-->dev_Chnl[%d]-->dev_stream_type[%d]-->iPtsRateInterval[%d]\n", \
+									thread_id, pDevNode->pDevId, pDevNode->iDevChnl, pDevNode->iDevStreamType, pDevNode->iPtsRateInterval);
+						}
+						else
+						{
+							TRACE_ERR("thread_id[%lu] Calc iPtsRateInterval failed! Retry!\n", thread_id);
+							iIFlag = 2;
+							av_packet_free(&p_pkt);
+							continue;
+						}
+					}
 				}
-//				else if (0 == I_flag)//第二个I帧来之前BP帧全部丢弃
-				else if (iFirstIFlag)//第二个I帧来之前BP帧全部丢弃
+				else if (iIFlag<3)//第三个I帧来之前BP帧全部丢弃
 				{
+					if (iCalcRateIntervalFlag)
+					{
+						if (iCount == 0)
+						{
+							llPtsOld = p_pkt->pts;
+//							printf("p_pkt->pts=%lld\n", p_pkt->pts);
+						}
+						iCount++;
+					}
 					av_packet_free(&p_pkt);
 					continue;
 				}
-//				printf("\nVIDEO VIDEO VIDEO VIDEO  frame type=%d duration=%llu pts=%llu\n", p_pkt->flags, p_pkt->duration, p_pkt->pts);
 			}
 			else if (audioindex_a == p_pkt->stream_index)//音频帧
 			{
@@ -524,7 +575,7 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 		}
 		else
 		{
-			printf("av_read_frame() failed!\n");
+			TRACE_ERR("av_read_frame() failed!\n");
 			av_packet_free(&p_pkt);
 			pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
 			destory_client_list(pClientListHead);
@@ -554,7 +605,7 @@ End:
 	pDevNode = NULL;
 	pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 
-	TRACE_BLUE("read video thread exit!\n");
+	TRACE_ERR("read video thread[%lu] exit!\n", thread_id);
 	pthread_exit(NULL);
 }
 #endif

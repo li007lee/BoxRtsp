@@ -90,6 +90,19 @@ static HB_VOID send_rtsp_to_server_event_error_cb(struct bufferevent *connect_rt
 	CLIENT_LIST_HANDLE pClientNode = pMessengerArgsDev->pClientNode;
 	CLIENT_LIST_HEAD_HANDLE pRtspClientHead = &(pMessengerArgsDev->pDevNode->stRtspClientHead);
 
+	if (what & BEV_EVENT_TIMEOUT)//超时
+	{
+		TRACE_ERR("\n###########  send_rtsp_to_server_event_error_cb : send frame  timeout !\n");
+	}
+	else if (what & BEV_EVENT_ERROR)  //错误
+	{
+		TRACE_ERR("\n###########  send_rtsp_to_server_event_error_cb : send frame failed !\n");
+	}
+	else if (what & BEV_EVENT_EOF) //对端主动关闭
+	{
+		TRACE_YELLOW("\n###########  send_rtsp_to_server_event_error_cb : connection closed by peer!\n");
+	}
+
 	if (pRtspClientHead->iStartThreadFlag == 1) //如果发送线程已经启动，此处只置位
 	{
 		bufferevent_disable(pClientNode->pSendVideoToServerEvent, EV_READ|EV_WRITE);
@@ -103,7 +116,7 @@ static HB_VOID send_rtsp_to_server_event_error_cb(struct bufferevent *connect_rt
 		{
 			if (pClientNode != NULL)
 			{
-				printf("del one dev from dev_list!\n");
+//				printf("del one dev from dev_list!\n");
 				del_one_client(pRtspClientHead, pClientNode);
 				pMessengerArgsDev->pClientNode = NULL;
 			}
@@ -111,11 +124,11 @@ static HB_VOID send_rtsp_to_server_event_error_cb(struct bufferevent *connect_rt
 			if ((pMessengerArgsDev->pDevNode != NULL) && (pMessengerArgsDev->pDevNode->stRtspClientHead.iClientNum < 1))
 			{
 				//当前设备下如果已经没有用户了，那么需要把设备从设备链表摘除
-				printf("del one dev from dev_list!\n");
+//				printf("del one dev from dev_list!\n");
 				del_one_from_dev_list(pMessengerArgsDev->pDevNode);
 				pMessengerArgsDev->pDevNode = NULL;
 			}
-			printf("send_rtsp_to_server_event_error_cb free pMessengerArgs\n");
+			TRACE_ERR("send_rtsp_to_server_event_error_cb free pMessengerArgs\n");
 			free(pMessengerArgsDev);
 			pMessengerArgsDev = NULL;
 			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
@@ -154,15 +167,15 @@ static HB_VOID connect_to_rtsp_server_event_cb(struct bufferevent *pConnectRtspS
 
 	if (what & BEV_EVENT_CONNECTED)//盒子主动连接rtsp服务器成功
 	{
-		TRACE_GREEN("连接rtsp服务器成功！！！！！！！！！！！");
+		TRACE_GREEN("Connect to rtsp server succeed！！！！！！！！！！！\n");
 		//连接成功创建客户节点
 		CLIENT_LIST_HANDLE pClientNode = (CLIENT_LIST_HANDLE)malloc(sizeof(CLIENT_LIST_OBJ));
+		memset(pClientNode, 0, sizeof(CLIENT_LIST_OBJ));
 		pClientNode->pSendVideoToServerEvent = pConnectRtspServerBev;
 
 		pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
 		//插入链表
 		add_client_in_tail(pRtspClientHead, pClientNode);
-//		TRACE_GREEN("add client add client add client!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 		//启动读取视频流线程
 		if (pRtspClientHead->iStartThreadFlag == 0)
 		{
@@ -170,9 +183,16 @@ static HB_VOID connect_to_rtsp_server_event_cb(struct bufferevent *pConnectRtspS
 			pthread_create(&(pRtspClientHead->threadReadVideoId), NULL, read_video_data_from_dev_task, (HB_VOID*)pDevNode);
 		}
 		LIBEVENT_ARGS_DEV_HANDLE pMessengerArgsDev = (LIBEVENT_ARGS_DEV_HANDLE)malloc(sizeof(LIBEVENT_ARGS_DEV_OBJ));
+		memset(pMessengerArgsDev, 0, sizeof(LIBEVENT_ARGS_DEV_OBJ));
 		pMessengerArgsDev->pDevNode = pDevNode;
 		pMessengerArgsDev->pClientNode = pClientNode;
 
+		struct timeval tv_w;
+	    //设置超时，10秒内未收到对端发来数据则断开连接
+	    tv_w.tv_sec  = 10;
+	    tv_w.tv_usec = 0;
+		//设置数据发送的写超时
+		bufferevent_set_timeouts(pConnectRtspServerBev, NULL, &tv_w);
 		//设置连接出错后的回调函数
 		bufferevent_setcb(pConnectRtspServerBev, NULL, NULL, send_rtsp_to_server_event_error_cb, (HB_VOID *)pMessengerArgsDev);
 		bufferevent_enable(pConnectRtspServerBev, EV_WRITE);
@@ -232,7 +252,7 @@ static int analysis_json_server_info(char *p_SrcJson, char *p_ServerIp, int *p_S
  *	Function: 收到server_info信息后，连接rtsp服务器
  *
  *	@param pCmdBuf: [IN]存储rtsp服务器地址和端口的json串
- *  @parmm pMessengerArgs: [IN]libevent_server的参数结构体
+ *  @parmm pDevNode: [IN]设备节点的指针
  *
  *	Retrun: 无
  */
@@ -245,7 +265,7 @@ static HB_VOID connect_to_rtsp_server(HB_CHAR *pCmdBuf, DEV_LIST_HANDLE pDevNode
 	struct bufferevent *pSendVideoToServerEvent;//主动连接服务器事件
 
 	analysis_json_server_info(pCmdBuf, arrServerIp, &iServerPort);
-	TRACE_GREEN("rtsp_server_ip=[%s]\nrtsp_server_port=[%d]\n", arrServerIp, iServerPort);
+//	TRACE_LOG("rtsp_server_ip=[%s]\nrtsp_server_port=[%d]\n", arrServerIp, iServerPort);
 
 	pSendVideoToServerEvent = bufferevent_socket_new(pEventBase, -1, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS|BEV_OPT_THREADSAFE);
 	bzero(&stServeraddr, sizeof(stServeraddr));
@@ -292,7 +312,7 @@ static HB_VOID deal_client_cmd_error_cb1(struct bufferevent *bev, short events, 
 	}
 
 
-	printf("deal_client_cmd_error_cb1 free bev!\n");
+//	printf("deal_client_cmd_error_cb1 free bev!\n");
 	bufferevent_free(bev);
 	bev = NULL;
 
@@ -508,13 +528,13 @@ HB_VOID deal_client_cmd(struct bufferevent *pClientBev, void *arg)
 		{
 			if (strstr(arrc_RecvCmdBuf, "open_video") != NULL)
 			{
-				printf("read all recv recv recv recv open_video:[%s]\n", arrc_RecvCmdBuf);
+				TRACE_GREEN("Recv Cmd1 : [%s]\n", arrc_RecvCmdBuf);
 				//收到rtsp打开请求
 				deal_open_video_cmd(arrc_RecvCmdBuf, pClientBev);
 			}
 			else if (strstr(arrc_RecvCmdBuf, "server_info") != NULL)
 			{
-				printf("recv recv recv recv server_info:[%s]\n", arrc_RecvCmdBuf);
+				TRACE_GREEN("Recv Cmd2 : [%s]\n", arrc_RecvCmdBuf);
 				//拿到了rtsp服务器的ip和端口，需要将视频流发到这里
 				//创建线程并发送数据
 				bufferevent_free(pClientBev);
@@ -538,14 +558,14 @@ HB_VOID deal_client_cmd(struct bufferevent *pClientBev, void *arg)
 static HB_VOID accept_client_connect_cb(struct evconnlistener *pListener, evutil_socket_t iAcceptSockfd,
 	    struct sockaddr *pClientAddr, int slen, void *arg)
 {
-	struct timeval tv_w;
+	struct timeval tv_read;
 
 #if 1
 	//打印对端ip
 	struct sockaddr_in *p_PeerAddr = (struct sockaddr_in *)pClientAddr;
 	char arrch_PeerIp[16] = {0};
 	inet_ntop(AF_INET, &(p_PeerAddr->sin_addr), arrch_PeerIp, sizeof(arrch_PeerIp));
-	printf("\nAccept a new connect ! sockfd=%d accept ip=%s : %d\n", iAcceptSockfd,arrch_PeerIp, ntohs(p_PeerAddr->sin_port));
+	TRACE_YELLOW("\nA new Client[%s]:[%d] connect !\n", arrch_PeerIp, ntohs(p_PeerAddr->sin_port));
 #endif
 
     // 为新的连接分配并设置 bufferevent,设置BEV_OPT_CLOSE_ON_FREE宏后，当连接断开时也会通知客户端关闭套接字
@@ -553,10 +573,10 @@ static HB_VOID accept_client_connect_cb(struct evconnlistener *pListener, evutil
     //设置低水位，当数据长度大于消息头时才读取数据
     bufferevent_setwatermark(accept_sockfd_bev, EV_READ, sizeof(BOX_CTRL_CMD_OBJ)+1, 0);
     //设置超时，5秒内未收到对端发来数据则断开连接
-	tv_w.tv_sec  = 10;
-	tv_w.tv_usec = 0;
+    tv_read.tv_sec  = 10;
+    tv_read.tv_usec = 0;
 	//注意，在盒子连接设备处也设置了超时，此处超时需大于盒子与设备连接时的超时，当前盒子与设备连接超时时间为5s
-	bufferevent_set_timeouts(accept_sockfd_bev, &tv_w, NULL);
+	bufferevent_set_timeouts(accept_sockfd_bev, &tv_read, NULL);
     bufferevent_setcb(accept_sockfd_bev, deal_client_cmd, NULL, deal_client_cmd_error_cb1, NULL);
     bufferevent_enable(accept_sockfd_bev, EV_READ);
 

@@ -115,10 +115,11 @@ typedef enum _tagHB_BOOL
 #define TRUE    1
 #define FALSE   0
 
-
-
 #define BOX_SERVER_PORT 8109
 #define MAXBUF 1024
+//#define LIBEVENT_WRITE_BUF_SIZE		(2097152) //2M
+#define LIBEVENT_WRITE_BUF_SIZE		(11048576) //1M
+
 //#define DEV_DATA_BASE_NAME "../data/rtsp_dev_manager.db"
 #define DEV_DATA_BASE_NAME "/home/default/rtsp_dev_manager.db"
 //#define AUTHENTICATE  ture

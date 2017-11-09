@@ -20,6 +20,7 @@
 typedef struct _tagCLIENT_LIST
 {
 	HB_S32 iDelFlag;//节点删除标志,客户端开连接或者网络异常时会被置位，为1时表明需要删除当前客户节点
+	HB_S32 iMissFrameFlag;	//丢帧表示1表示丢过帧，0表示为丢过
 	HB_S64 pts;
 	struct bufferevent *pSendVideoToServerEvent;//主动连接服务器事件（视频流推送事件句柄）
 

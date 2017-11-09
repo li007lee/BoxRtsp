@@ -284,6 +284,7 @@ HB_VOID test_dev_connection(DEV_LIST_HANDLE pDevNode)
 #if 1
 static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
 {
+	HB_S32 iWriteBufLen = 0;
 	DEV_LIST_HANDLE pDevNode = (DEV_LIST_HANDLE)param;
 	CLIENT_LIST_HEAD_HANDLE pRtspClientHead = &(pDevNode->stRtspClientHead);
 	CLIENT_LIST_HANDLE pIndexClientNode = NULL;
@@ -346,6 +347,34 @@ static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
 			}
 			else
 			{
+				//获取当前缓冲区中已有数据的长度
+				iWriteBufLen = evbuffer_get_length(bufferevent_get_output(pIndexClientNode->pSendVideoToServerEvent));
+				if ((LIBEVENT_WRITE_BUF_SIZE - iWriteBufLen) < (pkt->size + sizeof(BOX_CTRL_CMD_OBJ)))
+				{
+					printf("send buff full send buff full send buff full!\n");
+					//如果当前缓冲区的空间不足以存储一帧数据，则丢帧
+					pIndexClientNode->iMissFrameFlag = 1;
+					pIndexClientNode = pIndexClientNode->pNext;
+					pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
+					continue;
+				}
+				else
+				{
+					//若缓冲区未满，则判断是否丢过帧，若丢过帧则需要将p帧丢弃，从I帧开始发送
+					if ((1 == pIndexClientNode->iMissFrameFlag) && (1 != pkt->flags))
+					{
+						//丢过帧且当前不是I帧，此帧丢弃
+						printf("miss miss miss miss miss miss frame!\n");
+						pIndexClientNode = pIndexClientNode->pNext;
+						pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
+						continue;
+					}
+				}
+
+				//获取写缓冲的缓冲区大小
+//				int len = bufferevent_get_max_to_write(pIndexClientNode->pSendVideoToServerEvent);
+//				printf("############size:%d\n", len);
+				pIndexClientNode->iMissFrameFlag = 0;
 				pIndexClientNode->pts += pDevNode->iPtsRateInterval;
 				send_cmd.pts = pIndexClientNode->pts;
 //				send_cmd.uiVideoSec = (((HB_U32)(pIndexClientNode->pts))/90)/1000;
@@ -354,6 +383,7 @@ static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
 				bufferevent_write(pIndexClientNode->pSendVideoToServerEvent, &send_cmd, sizeof(BOX_CTRL_CMD_OBJ));
 				bufferevent_write(pIndexClientNode->pSendVideoToServerEvent, pkt->data, pkt->size);
 				pIndexClientNode = pIndexClientNode->pNext;
+
 			}
 			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 		}

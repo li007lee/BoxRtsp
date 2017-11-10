@@ -6,24 +6,7 @@
  */
 
 #include "my_include.h"
-#include "libavcodec/avcodec.h"
-#include "list.h"
 #include "video_data_list.h"
-
-HB_VOID delete_vedio_data_node(HB_VOID *p_node)
-{
-	LIST_NODE_HANDLE handle = (LIST_NODE_HANDLE)p_node;
-//	static int num = 0;
-
-	if (NULL != handle->p_value)
-	{
-		av_packet_free((AVPacket**)(&(handle->p_value)));
-		handle->p_value = NULL;
-//		printf("free free free av_packet = %d\n", ++num);
-	}
-
-	return;
-}
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -38,13 +21,9 @@ HB_VOID delete_vedio_data_node(HB_VOID *p_node)
 ////////////////////////////////////////////////////////////////////////////////
 HB_S32 video_data_list_init(VIDEO_DATA_LIST_HANDLE video_data_list)
 {
-	video_data_list->plist = list_create();
-	//vide_data_list.plist->new_node = create_sensor_data_node;
-	video_data_list->plist->del_node = delete_vedio_data_node;
+	list_init(&(video_data_list->listVideoDataList));    /* 初始化链表 */
+//	list_attributes_copy(&(video_data_list->listVideoDataList), element_meter, 1);
 	video_data_list->b_wait = HB_FALSE;
-	video_data_list->plist->stop_send_flag = 0;
-	//list_reset(ele_data_list->plist);
-	//list_add_node_to_end(ele_data_list->plist);
 	pthread_mutex_init(&video_data_list->list_mutex, NULL);
 	pthread_cond_init(&(video_data_list->list_empty), NULL);
 

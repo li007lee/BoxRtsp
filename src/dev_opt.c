@@ -301,7 +301,8 @@ static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
 			pthread_exit(NULL);
 		}
 
-    	while(pRtspClientHead->stVideoDataList.plist->cnt < 2)
+//    	while(pRtspClientHead->stVideoDataList.plist->cnt < 2)
+    	while(list_size(&(pRtspClientHead->stVideoDataList.listVideoDataList)) < 2)
     	{
     		pthread_mutex_lock(&(pRtspClientHead->stVideoDataList.list_mutex));
     		pRtspClientHead->stVideoDataList.b_wait = HB_TRUE;
@@ -316,8 +317,14 @@ static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
     		pthread_mutex_unlock(&(pRtspClientHead->stVideoDataList.list_mutex));
     	}
 
-		pthread_mutex_lock(&(pRtspClientHead->stVideoDataList.list_mutex));
-		pkt = (AVPacket*)(pRtspClientHead->stVideoDataList.plist->p_head->p_value);
+//		pthread_mutex_lock(&(pRtspClientHead->stVideoDataList.list_mutex));
+//		p_pkt pVideoData = (LIST_TEST_HANDLE)list_get_at(&(pRtspClientHead->stVideoDataList.listVideoDataList) , 0);
+//		pkt = (AVPacket*)(pRtspClientHead->stVideoDataList.plist->p_head->p_value);
+    	pthread_mutex_lock(&(pRtspClientHead->stVideoDataList.list_mutex));
+//    	printf("get head!\n");
+		pkt = (AVPacket*)list_get_at(&(pRtspClientHead->stVideoDataList.listVideoDataList) , 0);
+//		printf("get head end!\n");
+//		pthread_mutex_unlock(&(pRtspClientHead->stVideoDataList.list_mutex));
 		send_cmd.cmd_type = BOX_VIDEO_DATA;
 		if(1 == pkt->flags)
 		{
@@ -383,13 +390,18 @@ static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
 				bufferevent_write(pIndexClientNode->pSendVideoToServerEvent, &send_cmd, sizeof(BOX_CTRL_CMD_OBJ));
 				bufferevent_write(pIndexClientNode->pSendVideoToServerEvent, pkt->data, pkt->size);
 				pIndexClientNode = pIndexClientNode->pNext;
-
 			}
 			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 		}
 
-		list_remove_head_node(pRtspClientHead->stVideoDataList.plist);
+//		printf("1111111111\n");
+		av_packet_free(&pkt);
+//		printf("2222222222222222\n");
+//		pthread_mutex_lock(&(pRtspClientHead->stVideoDataList.list_mutex));
+		list_delete_at(&(pRtspClientHead->stVideoDataList.listVideoDataList), 0);
+//		printf("33333\n");
 		pthread_mutex_unlock(&(pRtspClientHead->stVideoDataList.list_mutex));
+//		printf("total node : [%d]\n", list_size(&(pRtspClientHead->stVideoDataList.listVideoDataList)));
     }
 
     return NULL;
@@ -505,6 +517,7 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
     HB_S32 iCalcRateIntervalFlag=0;
     HB_S32 iCount = 0;
     HB_S64 llPtsOld = 0;
+    int iRet = 0;
     while (1)
     {
     	if(pClientListHead->iClientNum < 1)
@@ -515,7 +528,7 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
     	AVPacket *p_pkt = (AVPacket*)malloc(sizeof(AVPacket));
         av_init_packet(p_pkt);
 
-		if(av_read_frame(in_fmt_ctx_v, p_pkt) >= 0)
+		if((iRet = av_read_frame(in_fmt_ctx_v, p_pkt)) >= 0)
 		{
 //			printf("\n thread:[%lu] VIDEO VIDEO VIDEO VIDEO  frame type=%d duration=%lld pts=%lld\n", thread_id, p_pkt->flags, p_pkt->duration, p_pkt->pts);
 //			printf("\nVIDEO VIDEOframe type=%d duration=%lld pts=%llu\n", p_pkt->flags, p_pkt->duration, p_pkt->pts);
@@ -590,6 +603,17 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 				continue;
 			}
 
+			pthread_mutex_lock(&(pClientListHead->stVideoDataList.list_mutex));
+			list_append(&(pClientListHead->stVideoDataList.listVideoDataList), p_pkt);
+			pthread_mutex_unlock(&(pClientListHead->stVideoDataList.list_mutex));
+			if(HB_TRUE == pClientListHead->stVideoDataList.b_wait)
+			{
+				pthread_mutex_lock(&(pClientListHead->stVideoDataList.list_mutex));
+				pthread_cond_signal(&(pClientListHead->stVideoDataList.list_empty));
+				pthread_mutex_unlock(&(pClientListHead->stVideoDataList.list_mutex));
+			}
+
+#if 0
 			LIST_NODE_HANDLE video_data_node = NULL;
 			pthread_mutex_lock(&(pClientListHead->stVideoDataList.list_mutex));
 			video_data_node = (LIST_NODE_HANDLE)list_add_node_to_end(pClientListHead->stVideoDataList.plist);
@@ -602,10 +626,11 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 				pthread_cond_signal(&(pClientListHead->stVideoDataList.list_empty));
 				pthread_mutex_unlock(&(pClientListHead->stVideoDataList.list_mutex));
 			}
+#endif
 		}
 		else
 		{
-			TRACE_ERR("av_read_frame() failed!\n");
+			TRACE_ERR("av_read_frame() failed!%d\n", iRet);
 			av_packet_free(&p_pkt);
 			pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
 			destory_client_list(pClientListHead);
@@ -627,8 +652,11 @@ End:
 		pthread_join(pClientListHead->threadSendVideoId, NULL);//等待发送rtp包线程退出
 	}
 	pthread_mutex_lock(&(pClientListHead->stVideoDataList.list_mutex));
-	list_destroy(pClientListHead->stVideoDataList.plist);
+	list_destroy(&(pClientListHead->stVideoDataList.listVideoDataList));
+//	printf("destory total node : [%d]\n", list_size(&(pClientListHead->stVideoDataList.listVideoDataList)));
+//	list_destroy(pClientListHead->stVideoDataList.plist);
 	pthread_mutex_unlock(&(pClientListHead->stVideoDataList.list_mutex));
+
 
 	pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
 	del_one_from_dev_list(pDevNode);

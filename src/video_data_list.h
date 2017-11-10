@@ -8,12 +8,19 @@
 #ifndef VIDEO_DATA_LIST_H_
 #define VIDEO_DATA_LIST_H_
 
-#include "list.h"
+#include "simclist.h"
+
+//typedef struct _tagLIST_TEST
+//{
+//	HB_VOID *p_value;	//存放数据的指针
+//}LIST_TEST_OBJ, *LIST_TEST_HANDLE;
+
 
 typedef struct _tagVIDEO_DATA_LIST
 {
-	LIST_HANDLE			    plist;			 //链表指针
-	HB_BOOL				    b_wait;			 //等待标志位
+//	LIST_HANDLE		plist;			 //链表指针
+	list_t listVideoDataList;
+	HB_BOOL			b_wait;			 //等待标志位
 	pthread_mutex_t		list_mutex;	 //链表互斥锁
 	pthread_cond_t		    list_empty;	 //链表空的条件锁
 }VIDEO_DATA_LIST_OBJ, *VIDEO_DATA_LIST_HANDLE;

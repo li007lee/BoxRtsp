@@ -394,12 +394,9 @@ static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
 			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 		}
 
-//		printf("1111111111\n");
 		av_packet_free(&pkt);
-//		printf("2222222222222222\n");
-//		pthread_mutex_lock(&(pRtspClientHead->stVideoDataList.list_mutex));
+		pthread_mutex_lock(&(pRtspClientHead->stVideoDataList.list_mutex));
 		list_delete_at(&(pRtspClientHead->stVideoDataList.listVideoDataList), 0);
-//		printf("33333\n");
 		pthread_mutex_unlock(&(pRtspClientHead->stVideoDataList.list_mutex));
 //		printf("total node : [%d]\n", list_size(&(pRtspClientHead->stVideoDataList.listVideoDataList)));
     }

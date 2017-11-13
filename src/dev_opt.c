@@ -211,9 +211,34 @@ static HB_VOID active_connect_eventcb(struct bufferevent *connect_dev_bev, HB_S1
 		//连接设备成功发送describe获取sdp信息
 		HB_CHAR arr_Discribe[1024] = {0};
 
-		snprintf(arr_Discribe, sizeof(arr_Discribe), \
-			"DESCRIBE %s RTSP/1.0\r\nCSeq: 3\r\nAccept: application/sdp\r\nAuthorization: Basic %s\r\n\r\n", \
-			pDevNode->arrDevRtspUrl, pDevNode->arrBasicAuthenticate);
+		if (pDevNode->iDevStreamType==0)
+		{
+			//主码流
+			snprintf(arr_Discribe, sizeof(arr_Discribe), \
+				"DESCRIBE %s RTSP/1.0\r\nCSeq: 3\r\nAccept: application/sdp\r\nAuthorization: Basic %s\r\n\r\n", \
+				pDevNode->arrDevRtspMainUrl, pDevNode->arrBasicAuthenticate);
+			printf("DESCRIBE main 1: [%s]\n", arr_Discribe);
+		}
+		else
+		{
+			//子码流
+			if ((pDevNode->arrDevRtspSubUrl == NULL) || (strlen(pDevNode->arrDevRtspSubUrl) == 0))
+			{
+				//没有子码流依然使用主码流
+				snprintf(arr_Discribe, sizeof(arr_Discribe), \
+					"DESCRIBE %s RTSP/1.0\r\nCSeq: 3\r\nAccept: application/sdp\r\nAuthorization: Basic %s\r\n\r\n", \
+					pDevNode->arrDevRtspMainUrl, pDevNode->arrBasicAuthenticate);
+				printf("DESCRIBE main 2: [%s]\n", arr_Discribe);
+			}
+			else
+			{
+				//有子码流
+				snprintf(arr_Discribe, sizeof(arr_Discribe), \
+					"DESCRIBE %s RTSP/1.0\r\nCSeq: 3\r\nAccept: application/sdp\r\nAuthorization: Basic %s\r\n\r\n", \
+					pDevNode->arrDevRtspSubUrl, pDevNode->arrBasicAuthenticate);
+				printf("DESCRIBE sub 1: [%s]\n", arr_Discribe);
+			}
+		}
 
 		TRACE_GREEN("\n############  connect dev successful and start to get dev SDP !\n");
 		bufferevent_write(connect_dev_bev, arr_Discribe, strlen(arr_Discribe));
@@ -301,7 +326,6 @@ static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
 			pthread_exit(NULL);
 		}
 
-//    	while(pRtspClientHead->stVideoDataList.plist->cnt < 2)
     	while(list_size(&(pRtspClientHead->stVideoDataList.listVideoDataList)) < 2)
     	{
     		pthread_mutex_lock(&(pRtspClientHead->stVideoDataList.list_mutex));
@@ -317,14 +341,10 @@ static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
     		pthread_mutex_unlock(&(pRtspClientHead->stVideoDataList.list_mutex));
     	}
 
-//		pthread_mutex_lock(&(pRtspClientHead->stVideoDataList.list_mutex));
-//		p_pkt pVideoData = (LIST_TEST_HANDLE)list_get_at(&(pRtspClientHead->stVideoDataList.listVideoDataList) , 0);
-//		pkt = (AVPacket*)(pRtspClientHead->stVideoDataList.plist->p_head->p_value);
     	pthread_mutex_lock(&(pRtspClientHead->stVideoDataList.list_mutex));
-//    	printf("get head!\n");
 		pkt = (AVPacket*)list_get_at(&(pRtspClientHead->stVideoDataList.listVideoDataList) , 0);
-//		printf("get head end!\n");
 //		pthread_mutex_unlock(&(pRtspClientHead->stVideoDataList.list_mutex));
+
 		send_cmd.cmd_type = BOX_VIDEO_DATA;
 		if(1 == pkt->flags)
 		{
@@ -395,7 +415,7 @@ static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
 		}
 
 		av_packet_free(&pkt);
-		pthread_mutex_lock(&(pRtspClientHead->stVideoDataList.list_mutex));
+//		pthread_mutex_lock(&(pRtspClientHead->stVideoDataList.list_mutex));
 		list_delete_at(&(pRtspClientHead->stVideoDataList.listVideoDataList), 0);
 		pthread_mutex_unlock(&(pRtspClientHead->stVideoDataList.list_mutex));
 //		printf("total node : [%d]\n", list_size(&(pRtspClientHead->stVideoDataList.listVideoDataList)));
@@ -455,17 +475,37 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
     in_fmt_ctx_v->interrupt_callback.callback = interrupt_cb; //--------注册回调函数,用于控制av_read_frame的超时
     in_fmt_ctx_v->interrupt_callback.opaque = &time_now;
 
-
 	AVDictionary* options = NULL;
     //设置rtsp传输模式为tcp
     av_dict_set(&options, "rtsp_transport", "tcp", 0);
-    snprintf(arrOpenRtspUrl, sizeof(arrOpenRtspUrl), "rtsp://%s:%s@%s", \
-    	pDevNode->arrUserName, pDevNode->arrUserPasswd, pDevNode->arrDevRtspUrl+strlen("rtsp://"));
+
+    if (pDevNode->iDevStreamType == 0)
+    {
+    	//主码流
+        snprintf(arrOpenRtspUrl, sizeof(arrOpenRtspUrl), "rtsp://%s:%s@%s", \
+        	pDevNode->arrUserName, pDevNode->arrUserPasswd, pDevNode->arrDevRtspMainUrl+strlen("rtsp://"));
+    }
+    else
+    {
+    	//子码流
+    	if ((pDevNode->arrDevRtspSubUrl == NULL) || (strlen(pDevNode->arrDevRtspSubUrl) == 0))
+    	{
+    		//如果没有子码流，依然使用主码流打开
+    		snprintf(arrOpenRtspUrl, sizeof(arrOpenRtspUrl), "rtsp://%s:%s@%s", \
+    				pDevNode->arrUserName, pDevNode->arrUserPasswd, pDevNode->arrDevRtspMainUrl+strlen("rtsp://"));
+    	}
+    	else
+    	{
+    		snprintf(arrOpenRtspUrl, sizeof(arrOpenRtspUrl), "rtsp://%s:%s@%s", \
+    		    	pDevNode->arrUserName, pDevNode->arrUserPasswd, pDevNode->arrDevRtspSubUrl+strlen("rtsp://"));
+    	}
+    }
+
     printf("OpenRtspUrl[%s]\n", arrOpenRtspUrl);
     ret = avformat_open_input(&in_fmt_ctx_v, arrOpenRtspUrl, NULL, &options);
     if(ret != 0)
     {
-    	ret = avformat_open_input(&in_fmt_ctx_v, pDevNode->arrDevRtspUrl, NULL, NULL);
+    	ret = avformat_open_input(&in_fmt_ctx_v, arrOpenRtspUrl, NULL, NULL);
         if(ret != 0)
         {
 			printf("\n0000000000000avformat_open_input failed ret=%d\n", ret);

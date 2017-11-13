@@ -31,7 +31,9 @@ typedef struct _tagDEV_LIST
 	HB_S32 iDevStreamType;	//设备主子码流
 	HB_CHAR arrDevIp[16];	//设备ip
 	HB_S32	iDevRtspPort;		//设备rtsp端口
-	HB_CHAR arrDevRtspUrl[512]; //设备rtsp地址
+	HB_CHAR arrDevRtspMainUrl[512]; //设备rtsp地址
+	HB_CHAR arrDevRtspSubUrl[512]; //设备rtsp地址
+//	HB_CHAR arrDevRtspUrl[512]; //设备rtsp地址
 	HB_CHAR arrUserName[64];	//设备用户名
 	HB_CHAR arrUserPasswd[64];	//设备密码
 	HB_CHAR arrBasicAuthenticate[128]; //基本认证

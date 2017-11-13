@@ -22,10 +22,14 @@ static HB_S32 load_device_ip_port_cb( HB_VOID * para, HB_S32 n_column, HB_CHAR *
 	DEV_LIST_HANDLE pDevNode = (DEV_LIST_HANDLE)para;
 	strncpy(pDevNode->arrDevIp, column_value[0], strlen(column_value[0]));
 	pDevNode->iDevRtspPort = atoi(column_value[1]);
-	strncpy(pDevNode->arrDevRtspUrl, column_value[2], strlen(column_value[2]));
-	strncpy(pDevNode->arrUserName, column_value[3], strlen(column_value[3]));
-	strncpy(pDevNode->arrUserPasswd, column_value[4], strlen(column_value[4]));
-	strncpy(pDevNode->arrBasicAuthenticate, column_value[5], strlen(column_value[5]));
+	strncpy(pDevNode->arrUserName, column_value[2], strlen(column_value[2]));
+	strncpy(pDevNode->arrUserPasswd, column_value[3], strlen(column_value[3]));
+	strncpy(pDevNode->arrBasicAuthenticate, column_value[4], strlen(column_value[4]));
+
+	strncpy(pDevNode->arrDevRtspMainUrl, column_value[5], strlen(column_value[5]));
+	strncpy(pDevNode->arrDevRtspSubUrl, column_value[6], strlen(column_value[6]));
+	printf("arrDevRtspMainUrl:[%s]\n", column_value[5]);
+	printf("iDevRtspPort:[%d]\n", pDevNode->iDevRtspPort);
 
 	return 0;
 }
@@ -416,8 +420,8 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 		memset(pDevNode, 0, sizeof(DEV_LIST_OBJ));
 
 		snprintf(sql, sizeof(sql), \
-			"select dev_ip,dev_port,rtsp_url,dev_name,dev_passwd,basic_authenticate from device_info where dev_id='%s_%d'", \
-			accDevId, iDevStreamType);
+			"select dev_ip,rtsp_list.rtsp_port,dev_login_usr,dev_login_passwd,basic_authenticate,rtsp_list.rtsp_main,rtsp_list.rtsp_sub from onvif_dev_data left join rtsp_list on onvif_dev_data.dev_id='%s' where rtsp_list.[dev_id]=onvif_dev_data.dev_id and rtsp_list.[dev_number]='%d'", \
+			accDevId, iDevChnl);
 		if (sql_operation(sql, DEV_DATA_BASE_NAME, load_device_ip_port_cb, (HB_VOID *)pDevNode) < 0)
 		{
 			//数据库操作失败

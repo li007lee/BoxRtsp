@@ -68,6 +68,8 @@ typedef struct _tagDEV_LIST_HEAD
 	pthread_mutex_t	mutexDevListMutex;	 //设备链表互斥所
 }DEV_LIST_HEAD_OBJ, *DEV_LIST_HEAD_HANDLE;
 
+
+
 DEV_LIST_HEAD_OBJ stDevListHead;
 
 HB_VOID init_dev_list();

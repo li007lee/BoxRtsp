@@ -20,16 +20,26 @@ struct event_base *pEventBase;
 static HB_S32 load_device_ip_port_cb( HB_VOID * para, HB_S32 n_column, HB_CHAR ** column_value, HB_CHAR ** column_name )
 {
 	DEV_LIST_HANDLE pDevNode = (DEV_LIST_HANDLE)para;
+	HB_CHAR cTmpBuf[512] = {0};
 	strncpy(pDevNode->arrDevIp, column_value[0], strlen(column_value[0]));
 	pDevNode->iDevRtspPort = atoi(column_value[1]);
 	strncpy(pDevNode->arrUserName, column_value[2], strlen(column_value[2]));
 	strncpy(pDevNode->arrUserPasswd, column_value[3], strlen(column_value[3]));
 	strncpy(pDevNode->arrBasicAuthenticate, column_value[4], strlen(column_value[4]));
 
-	strncpy(pDevNode->arrDevRtspMainUrl, column_value[5], strlen(column_value[5]));
-	strncpy(pDevNode->arrDevRtspSubUrl, column_value[6], strlen(column_value[6]));
-	printf("arrDevRtspMainUrl:[%s]\n", column_value[5]);
-	printf("iDevRtspPort:[%d]\n", pDevNode->iDevRtspPort);
+	strncpy(cTmpBuf, column_value[5], strlen(column_value[5]));
+	snprintf(pDevNode->arrDevRtspMainUrl, sizeof(pDevNode->arrDevRtspMainUrl), \
+					"rtsp://%s:%d%s", pDevNode->arrDevIp, pDevNode->iDevRtspPort, cTmpBuf);
+//	strncpy(pDevNode->arrDevRtspMainUrl, column_value[5], strlen(column_value[5]));
+
+	memset(cTmpBuf, 0, sizeof(cTmpBuf));
+	strncpy(cTmpBuf, column_value[6], strlen(column_value[6]));
+	snprintf(pDevNode->arrDevRtspSubUrl, sizeof(pDevNode->arrDevRtspSubUrl), \
+					"rtsp://%s:%d%s", pDevNode->arrDevIp, pDevNode->iDevRtspPort, cTmpBuf);
+
+//	strncpy(pDevNode->arrDevRtspSubUrl, column_value[6], strlen(column_value[6]));
+	printf("arrDevRtspMainUrl:[%s]\n", pDevNode->arrDevRtspMainUrl);
+	printf("arrDevRtspSubUrl:[%s]\n", pDevNode->arrDevRtspSubUrl);
 
 	return 0;
 }

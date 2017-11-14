@@ -10,7 +10,18 @@
 
 
 #include "my_include.h"
-#include "video_data_list.h"
+#include "simclist.h"
+
+
+//视频缓冲结构体
+typedef struct _tagVIDEO_DATA_LIST
+{
+	list_t listVideoDataList;
+	HB_BOOL			b_wait;			 //等待标志位
+	pthread_mutex_t		list_mutex;	 //链表互斥锁
+	pthread_cond_t		    list_empty;	 //链表空的条件锁
+}VIDEO_DATA_LIST_OBJ, *VIDEO_DATA_LIST_HANDLE;
+
 
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -70,4 +81,6 @@ HB_S32	add_wait_client_in_tail(WAIT_CLIENT_LIST_HEAD_HANDLE pWaitClientListHead,
 HB_S32 del_one_wait_client(WAIT_CLIENT_LIST_HEAD_HANDLE pWaitClientListHead, WAIT_CLIENT_LIST_HANDLE pDelNode);
 HB_VOID destory_wait_client(WAIT_CLIENT_LIST_HEAD_HANDLE pWaitClientListHead);
 
+// 描述：视频缓冲数据链表初始化
+HB_S32 video_data_list_init(VIDEO_DATA_LIST_HANDLE video_data_list);
 #endif /* CLIENT_LIST_H_ */

@@ -138,3 +138,4 @@ DEV_LIST_HANDLE find_in_dev_list(HB_CHAR *pDevID, HB_S32 iDevChnl, HB_S32 iDevSt
 	TRACE_YELLOW("have not find this device.\n");
 	return NULL;
 }
+

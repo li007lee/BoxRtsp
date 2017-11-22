@@ -1,11 +1,11 @@
-#BOX_TYPE?=pc_x86
+BOX_TYPE?=pc_x86
 #BOX_TYPE?=pc_x86_64
-BOX_TYPE?=hisi_v100
+#BOX_TYPE?=hisi_v100
 
 ifeq ($(BOX_TYPE), pc_x86)
 CC=gcc
 STRIP=strip
-CFLAGS = -Wall -g
+CFLAGS = -Wall
 INC_PATH = -I./inc
 LIBS :=  -L./lib/X86 \
 			-levent -levent_pthreads -lsqlite3 -lavformat \
@@ -47,7 +47,7 @@ SRCS = $(wildcard ./src/*.c)
 OBJS = $(patsubst %.c,%.o,$(notdir ${SRCS}))
 
 all:
-	$(CC) $(SRCS) $(INC_PATH) $(LIBS) $(CFLAGS) -o $(APPBIN)
+	$(CC) $(CFLAGS) $(SRCS) $(INC_PATH) $(LIBS) -o $(APPBIN)
 	$(STRIP) $(APPBIN)
 	cp $(APPBIN) $(DEST_BIN)/$(APPBIN)
 	mv $(APPBIN) ./bin/

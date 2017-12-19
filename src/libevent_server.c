@@ -104,17 +104,24 @@ static HB_VOID send_rtsp_to_server_event_error_cb(struct bufferevent *connect_rt
 	CLIENT_LIST_HANDLE pClientNode = pMessengerArgsDev->pClientNode;
 	CLIENT_LIST_HEAD_HANDLE pRtspClientHead = &(pMessengerArgsDev->pDevNode->stRtspClientHead);
 
+	HB_S32 err = EVUTIL_SOCKET_ERROR();
+
 	if (what & BEV_EVENT_TIMEOUT)//超时
 	{
-		TRACE_ERR("\n###########  send_rtsp_to_server_event_error_cb : send frame  timeout !\n");
+		TRACE_ERR("\n###########  send_rtsp_to_server_event_error_cb(%d) : send frame  timeout(%s) !\n", err, evutil_socket_error_to_string(err));
 	}
 	else if (what & BEV_EVENT_ERROR)  //错误
 	{
-		TRACE_ERR("\n###########  send_rtsp_to_server_event_error_cb : send frame failed !\n");
+
+		TRACE_ERR("\n###########  send_rtsp_to_server_event_error_cb(%d) : send frame failed(%s) !\n", err, evutil_socket_error_to_string(err));
 	}
 	else if (what & BEV_EVENT_EOF) //对端主动关闭
 	{
-		TRACE_YELLOW("\n###########  send_rtsp_to_server_event_error_cb : connection closed by peer!\n");
+		TRACE_YELLOW("\n###########  send_rtsp_to_server_event_error_cb(%d) : connection closed by peer(%s)!\n", err, evutil_socket_error_to_string(err));
+	}
+	else
+	{
+		TRACE_ERR("\n###########  send_rtsp_to_server_event_error_cb(%d) : (%s) !\n", err, evutil_socket_error_to_string(err));
 	}
 
 	if (pRtspClientHead->iStartThreadFlag == 1) //如果发送线程已经启动，此处只置位
@@ -311,18 +318,19 @@ static HB_VOID connect_to_rtsp_server(HB_CHAR *pCmdBuf, DEV_LIST_HANDLE pDevNode
 static HB_VOID deal_client_cmd_error_cb1(struct bufferevent *bev, short events, void *args)
 {
 //	LIBEVENT_ARGS_HANDLE pMessengerArgs = (LIBEVENT_ARGS_HANDLE)args;
+	HB_S32 err = EVUTIL_SOCKET_ERROR();
 
 	if (events & BEV_EVENT_EOF)//对端关闭
 	{
-		TRACE_ERR("RTSP CMD peer client closed (deal_client_request_error_cb1)!");
+		TRACE_ERR("######## deal_client_cmd_error_cb1 BEV_EVENT_EOF(%d) : %s !", err, evutil_socket_error_to_string(err));
 	}
 	else if (events & BEV_EVENT_ERROR)//错误事件
 	{
-		TRACE_ERR("Error from bufferevent (deal_client_request_error_cb1)");
+		TRACE_ERR("######## deal_client_cmd_error_cb1 BEV_EVENT_ERROR(%d) : %s !", err, evutil_socket_error_to_string(err));
 	}
 	else if (events & BEV_EVENT_TIMEOUT)//超时事件
 	{
-		TRACE_ERR("RTSP CMD (deal_client_request_error_cb1)  timeout !");
+		TRACE_ERR("######## deal_client_cmd_error_cb1 BEV_EVENT_TIMEOUT(%d) : %s !", err, evutil_socket_error_to_string(err));
 	}
 
 
@@ -401,6 +409,52 @@ static HB_S32 analysis_json_dev_info(char *p_SrcJson, char *pDevId, int *pDevChn
 }
 
 
+//根据网卡eth获取相应到mac地址
+static HB_S32 get_mac_dev(HB_CHAR *mac_sn, HB_CHAR *dev)
+{
+    struct ifreq tmp;
+    HB_S32 sock_mac;
+   // HB_CHAR *tmpflag;
+    //HB_CHAR mac_addr[30];
+    sock_mac = socket(AF_INET, SOCK_STREAM, 0);
+    if( sock_mac == -1)
+    {
+        return -1;
+    }
+    memset(&tmp,0,sizeof(tmp));
+    strncpy(tmp.ifr_name, dev, sizeof(tmp.ifr_name)-1 );
+    if( (ioctl( sock_mac, SIOCGIFHWADDR, &tmp)) < 0 )
+    {
+    	close(sock_mac);
+        return -1;
+    }
+
+    close(sock_mac);
+    memcpy(mac_sn, tmp.ifr_hwaddr.sa_data, 6);
+    return 0;
+}
+
+
+//获取盒子到序列号
+HB_S32 get_sys_sn(HB_CHAR *sn, HB_S32 sn_size)
+{
+	HB_U64 sn_num = 0;
+	HB_CHAR sn_mac[32] = {0};
+	HB_CHAR mac[32] = {0};
+	get_mac_dev(mac, ETH_X);
+	sprintf(sn_mac, "0x%02x%02x%02x%02x%02x%02x",
+			(HB_U8)mac[0],
+			(HB_U8)mac[1],
+			(HB_U8)mac[2],
+			(HB_U8)mac[3],
+			(HB_U8)mac[4],
+			(HB_U8)mac[5]);
+	sn_num = strtoull(sn_mac, 0, 16);
+	snprintf(sn, sn_size, "%llu", sn_num);
+
+	return 0;
+}
+
 /*
  *	Function: 收到打开视频流命令时的处理函数
  *
@@ -415,9 +469,11 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 	HB_S32 iDevStreamType = -1;//主子码流 0主码流，1子码流
 	DEV_LIST_HANDLE pDevNode = NULL;
 	HB_CHAR accDevId[MAX_DEV_ID_LEN] = {0}; //设备ID
+	HB_CHAR accDevIdTmp[MAX_DEV_ID_LEN] = {0}; //设备ID
+	HB_CHAR cMacSn[32] = {0};
 
-	analysis_json_dev_info(pCmdBuf, accDevId, &iDevChnl, &iDevStreamType);
-	TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", accDevId, iDevChnl, iDevStreamType);
+	analysis_json_dev_info(pCmdBuf, accDevIdTmp, &iDevChnl, &iDevStreamType);
+	TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", accDevIdTmp, iDevChnl, iDevStreamType);
 
 	pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
 	pDevNode = find_in_dev_list(accDevId, iDevChnl, iDevStreamType);
@@ -429,6 +485,9 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 		pDevNode = (DEV_LIST_HANDLE)malloc(sizeof(DEV_LIST_OBJ));
 		memset(pDevNode, 0, sizeof(DEV_LIST_OBJ));
 
+		get_sys_sn(cMacSn, sizeof(cMacSn));
+		strncpy(accDevId, accDevIdTmp+strlen(cMacSn)+1, MAX_DEV_ID_LEN);
+		TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", accDevId, iDevChnl, iDevStreamType);
 		snprintf(sql, sizeof(sql), \
 			"select dev_ip,rtsp_port,dev_login_usr,dev_login_passwd,basic_authenticate,rtsp_list.rtsp_main,rtsp_list.rtsp_sub from onvif_dev_data left join rtsp_list on onvif_dev_data.dev_id='%s' where rtsp_list.[dev_id]=onvif_dev_data.dev_id and rtsp_list.[dev_chnl_num]='%d'", \
 			accDevId, iDevChnl);
@@ -634,9 +693,12 @@ HB_VOID libevent_server_main_listen()
 		return ;
 	}
 
+
+	//LEV_OPT_CLOSE_ON_EXEC 用于为套接字设置close-on-exec标志，
+	//这个标志符的具体作用在于当开辟其他进程调用exec（）族函数时，在调用exec函数之前为exec族函数释放对应的文件描述符。
 	//绑定端口并接收连接
 	pListener = evconnlistener_new_bind(pEventBase, accept_client_connect_cb, NULL,
-			LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_REUSEABLE|LEV_OPT_THREADSAFE,
+			LEV_OPT_CLOSE_ON_FREE|LEV_OPT_REUSEABLE|LEV_OPT_THREADSAFE,
 			1024, (struct sockaddr*)&stListenAddr, sizeof(struct sockaddr_in));
 	event_base_dispatch(pEventBase);
 	evconnlistener_free(pListener);

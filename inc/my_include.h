@@ -119,9 +119,9 @@ typedef enum _tagHB_BOOL
 //#define LIBEVENT_WRITE_BUF_SIZE		(2097152) //2M
 #define LIBEVENT_WRITE_BUF_SIZE		(11048576) //1M
 
-
-//#define DEV_DATA_BASE_NAME "/home/default/TM_X01_Data.db"
-#define DEV_DATA_BASE_NAME "../data/TM_X01_Data.db"
+#define ETH_X	"eth0"
+#define DEV_DATA_BASE_NAME "/home/default/TM_X01_Data.db"
+//#define DEV_DATA_BASE_NAME "../data/TM_X01_Data.db"
 
 //#define DEV_DATA_BASE_NAME "../data/rtsp_dev_manager.db"
 //#define AUTHENTICATE  ture

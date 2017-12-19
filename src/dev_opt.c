@@ -96,20 +96,21 @@ static void analysis_sdp_info(HB_CHAR *p_SdpBuf, DEV_LIST_HANDLE p_DevNode)
 static HB_VOID deal_client_cmd_error_cb2(struct bufferevent *bev, short events, void *arg)
 {
 	DEV_LIST_HANDLE pDevNode = (DEV_LIST_HANDLE)arg;
+	HB_S32 err = EVUTIL_SOCKET_ERROR();
 
 	bufferevent_disable(bev, EV_READ|EV_WRITE);
 
 	if (events & BEV_EVENT_EOF)//对端关闭
 	{
-		TRACE_ERR("RTSP CMD peer client closed (deal_client_request_error_cb1)!");
+		TRACE_ERR("######## deal_client_cmd_error_cb2 BEV_EVENT_EOF(%d) : %s !", err, evutil_socket_error_to_string(err));
 	}
 	else if (events & BEV_EVENT_ERROR)//错误事件
 	{
-		TRACE_ERR("Error from bufferevent (deal_client_request_error_cb1)");
+		TRACE_ERR("######## deal_client_cmd_error_cb2 BEV_EVENT_ERROR(%d) : %s !", err, evutil_socket_error_to_string(err));
 	}
 	else if (events & BEV_EVENT_TIMEOUT)//超时事件
 	{
-		TRACE_ERR("RTSP CMD (deal_client_request_error_cb1)  timeout !");
+		TRACE_ERR("######## deal_client_cmd_error_cb2 BEV_EVENT_TIMEOUT(%d) : %s !", err, evutil_socket_error_to_string(err));
 	}
 
 	if ((pDevNode != NULL) && (pDevNode->stRtspClientHead.iClientNum < 1) && (pDevNode->stWaitClientHead.iWaitClientNum < 1))
@@ -429,7 +430,7 @@ static int interrupt_cb(void *ctx)
     // do something
 	static int count = 0;
 
-	if (count++ > 1000)
+	if (count++ > 100)
 	{
 		count = 0;
 		time_t *time_last = (time_t *)ctx;
@@ -443,8 +444,6 @@ static int interrupt_cb(void *ctx)
 			return AVERROR_EOF;//这个就是超时的返回
 		}
 	}
-
-
 
     return 0;
 }
@@ -463,7 +462,7 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 	TRACE_YELLOW("thread_id[%lu]--->dev_id[%s]--->dev_Chnl[%d]--->dev_stream_type[%d]\n", \
 			thread_id, pDevNode->pDevId, pDevNode->iDevChnl, pDevNode->iDevStreamType);
 
-	time_t  time_now = time(NULL);;
+	time_t  time_now = time(NULL);
 
 	HB_S32 read_video_data_node_task_flag = 0;
     int ret, i;
@@ -569,13 +568,17 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 		{
 //			printf("\n thread:[%lu] VIDEO VIDEO VIDEO VIDEO  frame type=%d duration=%lld pts=%lld\n", thread_id, p_pkt->flags, p_pkt->duration, p_pkt->pts);
 //			printf("\nVIDEO VIDEOframe type=%d duration=%lld pts=%llu\n", p_pkt->flags, p_pkt->duration, p_pkt->pts);
-			time(&time_now);
+
 			if(videoindex_v == p_pkt->stream_index)//视频帧
 			{
 				if(1 == p_pkt->flags)//I帧
 				{
-					iIFlag++;
-					if (iIFlag == 2)
+					time(&time_now);
+					if (iIFlag < 3)
+					{
+						iIFlag++;
+					}
+					else if (iIFlag == 2)
 					{
 						//第二个I帧出现，做一个标记，用来计算帧间隔
 						iCalcRateIntervalFlag = 1;

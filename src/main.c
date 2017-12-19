@@ -14,7 +14,8 @@
 int main()
 {
 	int ret = 0;
-	signal(SIGPIPE, SIG_IGN);
+
+//	signal(SIGPIPE, SIG_IGN);
 	sigset_t signal_mask;
 	sigemptyset (&signal_mask);
 	sigaddset (&signal_mask, SIGPIPE);

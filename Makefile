@@ -37,7 +37,7 @@ LIBS :=  -L./lib/hisiv100 \
 			-levent -levent_pthreads -lsqlite3 -lavformat \
 			-lavcodec -lavfilter -lswscale -lavutil -lswresample -lm -ldl -lpthread -lrt
 
-APPBIN = BoxRtsp_hisi100
+APPBIN = box_rtsp_h100
 DEST_BIN = /mnt/hgfs/nfs_dir/share_dir/hb/BoxRtsp/bin
 endif
 

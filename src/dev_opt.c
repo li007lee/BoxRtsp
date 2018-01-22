@@ -407,10 +407,11 @@ static HB_VOID *send_video_data_to_rtsp_task(HB_VOID *param)
 				send_cmd.pts = pIndexClientNode->pts;
 //				send_cmd.uiVideoSec = (((HB_U32)(pIndexClientNode->pts))/90)/1000;
 //				send_cmd.uiVideoUsec = (HB_U32)(((pIndexClientNode->pts/90)%1000)*1000);
-//				printf("send_cmd.pts:[%lld]\n", send_cmd.pts);
 				bufferevent_write(pIndexClientNode->pSendVideoToServerEvent, &send_cmd, sizeof(BOX_CTRL_CMD_OBJ));
 				bufferevent_write(pIndexClientNode->pSendVideoToServerEvent, pkt->data, pkt->size);
+				printf("data_type:[%d] ------> data_size:[%d] ------>pts:[%lld]\n", send_cmd.data_type, pkt->size, send_cmd.pts);
 				pIndexClientNode = pIndexClientNode->pNext;
+
 			}
 			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 		}
@@ -548,9 +549,7 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
     pthread_create(&(pClientListHead->threadSendVideoId), NULL, send_video_data_to_rtsp_task, (HB_VOID*)pDevNode);
 	read_video_data_node_task_flag = 1;
 #endif
-//	HB_S32 iIFlag = 0;
 	HB_S64 iIFlag = 0; //由于前几帧的pts经常出错，此变量用于忽略第两个个I帧，从第三I帧开始发送数据
-    HB_S32 iCalcRateIntervalFlag=0;
     HB_S32 iCount = 0;
     HB_S64 llPtsOld = 0;
     int iRet = 0;
@@ -574,26 +573,29 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 				if(1 == p_pkt->flags)//I帧
 				{
 					time(&time_now);
-					if (iIFlag < 3)
+					if (iIFlag == 0)
 					{
+						//I帧第一次出现,一般都是异常数据，直接丢弃
 						iIFlag++;
-					}
-					else if (iIFlag == 2)
-					{
-						//第二个I帧出现，做一个标记，用来计算帧间隔
-						iCalcRateIntervalFlag = 1;
-//						printf("\nI don't send !!!VIDEO VIDEOframe type=%d duration=%lld pts=%llu\n", p_pkt->flags, p_pkt->duration, p_pkt->pts);
 						av_packet_free(&p_pkt);
 						continue;
 					}
-					else if (iIFlag == 3)
+					else if (iIFlag == 1)
 					{
+						//I帧第二次出现,开始累积pts数据用于计算帧间隔
+						iIFlag++;
+						av_packet_free(&p_pkt);
+						continue;
+					}
+					else if (iIFlag == 2)
+					{
+						iIFlag++;
+						//I帧第二次出现,开始累积pts数据用于计算帧间隔
 						//因为是从第三个I帧发送数据，所以开始发送数据帧前计算出pts间隔
 //						printf("llPtsOld=%lld\n", llPtsOld);
 						if (iCount > 0)
 						{
 							pDevNode->iPtsRateInterval = (HB_S32)((p_pkt->pts-llPtsOld)/iCount);
-							iCalcRateIntervalFlag = 0;
 							TRACE_YELLOW("thread_id[%lu]-->dev_id[%s]-->dev_Chnl[%d]-->dev_stream_type[%d]-->iPtsRateInterval[%d]\n", \
 									thread_id, pDevNode->pDevId, pDevNode->iDevChnl, pDevNode->iDevStreamType, pDevNode->iPtsRateInterval);
 						}
@@ -606,19 +608,22 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 						}
 					}
 				}
-				else if (iIFlag<3)//第三个I帧来之前BP帧全部丢弃
+				else //BP帧
 				{
-					if (iCalcRateIntervalFlag)
+					if (iIFlag < 3) //第三个I帧前的数据全部丢弃
 					{
-						if (iCount == 0)
+						if (iIFlag == 2)
 						{
-							llPtsOld = p_pkt->pts;
-//							printf("p_pkt->pts=%lld\n", p_pkt->pts);
+							if (iCount == 0)
+							{
+								llPtsOld = p_pkt->pts;
+	//							printf("p_pkt->pts=%lld\n", p_pkt->pts);
+							}
+							iCount++;
 						}
-						iCount++;
+						av_packet_free(&p_pkt);
+						continue;
 					}
-					av_packet_free(&p_pkt);
-					continue;
 				}
 			}
 			else if (audioindex_a == p_pkt->stream_index)//音频帧

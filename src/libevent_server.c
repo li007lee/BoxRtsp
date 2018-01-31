@@ -9,6 +9,7 @@
 #include "sqlite3.h"
 #include "dev_opt.h"
 #include "client_list.h"
+#include "url_code.h"
 
 struct event_base *pEventBase;
 
@@ -470,13 +471,16 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 	DEV_LIST_HANDLE pDevNode = NULL;
 	HB_CHAR accDevId[MAX_DEV_ID_LEN] = {0}; //设备ID
 	HB_CHAR accDevIdTmp[MAX_DEV_ID_LEN] = {0}; //设备ID
+	HB_CHAR accDevIdDecode[MAX_DEV_ID_LEN] = {0}; //设备ID
 	HB_CHAR cMacSn[32] = {0};
 
 	analysis_json_dev_info(pCmdBuf, accDevIdTmp, &iDevChnl, &iDevStreamType);
-	TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", accDevIdTmp, iDevChnl, iDevStreamType);
+	url_decode(accDevIdTmp, strlen(accDevIdTmp), accDevIdDecode, MAX_DEV_ID_LEN);
+
+	TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", accDevIdDecode, iDevChnl, iDevStreamType);
 
 	pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
-	pDevNode = find_in_dev_list(accDevId, iDevChnl, iDevStreamType);
+	pDevNode = find_in_dev_list(accDevIdDecode, iDevChnl, iDevStreamType);
 	if (pDevNode == NULL)
 	{
 		//未找到设备
@@ -486,7 +490,7 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 		memset(pDevNode, 0, sizeof(DEV_LIST_OBJ));
 
 		get_sys_sn(cMacSn, sizeof(cMacSn));
-		strncpy(accDevId, accDevIdTmp+strlen(cMacSn)+1, MAX_DEV_ID_LEN);
+		strncpy(accDevId, accDevIdDecode+strlen(cMacSn)+1, MAX_DEV_ID_LEN);
 		TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", accDevId, iDevChnl, iDevStreamType);
 		snprintf(sql, sizeof(sql), \
 			"select dev_ip,rtsp_port,dev_login_usr,dev_login_passwd,basic_authenticate,rtsp_list.rtsp_main,rtsp_list.rtsp_sub from onvif_dev_data left join rtsp_list on onvif_dev_data.dev_id='%s' where rtsp_list.[dev_id]=onvif_dev_data.dev_id and rtsp_list.[dev_chnl_num]='%d'", \

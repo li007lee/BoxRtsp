@@ -14,15 +14,6 @@
 
 #define MAX_DEV_ID_LEN	256
 
-//盒子与设备的连接状态
-typedef enum _DEV_CONNECT_STATUS
-{
-	CONNECTED=1,	//已连接
-	CONNECTING,		//连接中
-	DISCONNECT,		//连接失败
-	NONE			//未连接s
-}DEV_CONNECT_STATUS;
-
 //具体记载设备信息的结构体
 typedef struct _tagDEV_LIST
 {
@@ -49,9 +40,7 @@ typedef struct _tagDEV_LIST
 	HB_CHAR a_rtpmap_audio[128];
 	/*************视频sdp信息*************/
 
-	DEV_CONNECT_STATUS enumDevConnectStatus; //设备连接状态
 	CLIENT_LIST_HEAD_OBJ stRtspClientHead;//用户链表的链表头
-	WAIT_CLIENT_LIST_HEAD_OBJ stWaitClientHead; //等待连接的用户链表
 
 	struct _tagDEV_LIST *pPrev;
 	struct _tagDEV_LIST *pNext;

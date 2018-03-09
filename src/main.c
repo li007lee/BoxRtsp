@@ -14,7 +14,6 @@
 int main()
 {
 	int ret = 0;
-
 //	signal(SIGPIPE, SIG_IGN);
 	sigset_t signal_mask;
 	sigemptyset (&signal_mask);
@@ -28,6 +27,8 @@ int main()
 
 	av_register_all();
 	avformat_network_init();
+
+//	printf("head size : [%d]\n", sizeof(BOX_CTRL_CMD_OBJ));
 
 //	初始化设备链表头
 	init_dev_list();

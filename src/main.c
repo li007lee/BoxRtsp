@@ -29,8 +29,8 @@ int main()
 	av_register_all();
 	avformat_network_init();
 
-//	初始化设备链表头
-	init_dev_list();
+	list_init(&listDevList);
+	pthread_rwlock_init(&rwlockMyLock, NULL);
 
 	printf("----------------------------------------------------------------\n");
 	printf("|                        BoxRtsp Started                       |\n");

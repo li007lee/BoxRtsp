@@ -115,10 +115,10 @@ static HB_VOID deal_client_cmd_error_cb2(struct bufferevent *bev, short events, 
 	if ((pDevNode != NULL) && (list_size(plistRtspClient) < 1) && (list_size(plistWaitClient) < 1))
 	{
 		printf("del one dev from dev_list!\n");
-		pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
-		del_one_from_dev_list(pDevNode);
+		pthread_rwlock_wrlock(&rwlockMyLock);
+		list_delete(&listDevList, (HB_VOID *)pDevNode);
 		pDevNode = NULL;
-		pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
+		pthread_rwlock_unlock(&rwlockMyLock);
 	}
 	printf("deal_client_cmd_error_cb2 free bev!\n");
 	bufferevent_free(bev);
@@ -169,22 +169,16 @@ static void read_dev_sdp_cb(struct bufferevent *connect_dev_bev, void *arg)
 
 	for (i=0;i<list_size(plistWaitClient);i++)
 	{
-		//获取每个zigbee模块下的传感器
 		WAIT_CLIENT_LIST_HANDLE pCurWaitClient = (WAIT_CLIENT_LIST_HANDLE)list_get_at(plistWaitClient, i);
 		struct bufferevent *p_AcceptClient_bev = pCurWaitClient->pWaitClientBev;
 		bufferevent_write(p_AcceptClient_bev, arr_SendBuf, ntohl(st_MsgHead.cmd_length)+sizeof(BOX_CTRL_CMD_OBJ));
 		bufferevent_setcb(p_AcceptClient_bev, deal_client_cmd, NULL, deal_client_cmd_error_cb2, (HB_VOID *)pDevNode);
 		bufferevent_enable(p_AcceptClient_bev, EV_READ);
-		pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
-//		del_one_wait_client(&(pDevNode->stWaitClientHead), pDevNode->stWaitClientHead.pWaitClientListFirst);
-		list_delete(plistWaitClient, pCurWaitClient);
-		pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 	}
-
-	return;
+	pthread_rwlock_wrlock(&rwlockMyLock);
+	list_destroy(plistWaitClient);
+	pthread_rwlock_unlock(&rwlockMyLock);
 }
-
-
 
 
 static HB_VOID active_connect_eventcb(struct bufferevent *connect_dev_bev, HB_S16 what, HB_VOID *arg)
@@ -238,11 +232,14 @@ static HB_VOID active_connect_eventcb(struct bufferevent *connect_dev_bev, HB_S1
 		if (pDevNode != NULL)
 		{
 			printf("del one dev from dev_list!\n");
-			pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
+			pthread_rwlock_wrlock(&rwlockMyLock);
+//			pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
 			list_destroy(plistWaitClient);
-			del_one_from_dev_list(pDevNode);
+//			del_one_from_dev_list(pDevNode);
+			list_delete(&listDevList, (HB_VOID *)pDevNode);
 			pDevNode = NULL;
-			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
+//			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
+			pthread_rwlock_unlock(&rwlockMyLock);
 		}
 //		此连接事件由deal_client_cmd_error_cb1超时时进行释放
 		printf("active_connect_eventcb free bev!\n");
@@ -510,7 +507,6 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 #if 1
 			BOX_CTRL_CMD_OBJ send_cmd;
 			HB_S32 iWriteBufLen = 0;
-			list_t *plistRtspClient = (list_t *)&(pDevNode->listRtspClient);
 			memset(&send_cmd, 0, sizeof(BOX_CTRL_CMD_OBJ));
 			send_cmd.cmd_type = BOX_VIDEO_DATA;
 			if(1 == p_pkt->flags)
@@ -523,20 +519,20 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 			}
 			send_cmd.cmd_length = p_pkt->size;
 	//		send_cmd.pts = pkt->pts;
-//			pIndexClientNode = pRtspClientHead->pClientListFirst;
 
 			for (i=0;i<list_size(plistRtspClient);i++)
 			{
-				//为每个zigbee设备下的传感器进行注册
 				CLIENT_LIST_HANDLE pIndexClientNode = (CLIENT_LIST_HANDLE)list_get_at(plistRtspClient, i);
-				pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
 				if (pIndexClientNode->iDelFlag == 1)
 				{
 					if (pIndexClientNode->pSendVideoToServerEvent != NULL)
 					{
 						bufferevent_free(pIndexClientNode->pSendVideoToServerEvent);
 						pIndexClientNode->pSendVideoToServerEvent = NULL;
+						pthread_rwlock_wrlock(&rwlockMyLock);
 						list_delete(plistRtspClient, (HB_VOID *)pIndexClientNode);
+						pthread_rwlock_unlock(&rwlockMyLock);
+						i--;
 						TRACE_YELLOW("\n###########  total client total client total client total client== [%d]!\n", list_size(plistRtspClient));
 					}
 				}
@@ -550,7 +546,7 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 						//如果当前缓冲区的空间不足以存储一帧数据，则丢帧(清空当前缓冲区)
 						evbuffer_drain(bufferevent_get_output(pIndexClientNode->pSendVideoToServerEvent), iWriteBufLen);
 						pIndexClientNode->iMissFrameFlag = 1;
-						pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
+//						pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 						continue;
 					}
 					else
@@ -560,7 +556,7 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 						{
 							//丢过帧且当前不是I帧，此帧丢弃
 //							printf("miss miss miss miss miss miss frame!\n");
-							pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
+//							pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 							continue;
 						}
 					}
@@ -577,7 +573,7 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 					bufferevent_write(pIndexClientNode->pSendVideoToServerEvent, p_pkt->data, p_pkt->size);
 	//				printf("data_type:[%d] ------> data_size:[%d] ------>pts:[%lld]\n", send_cmd.data_type, pkt->size, send_cmd.pts);
 				}
-				pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
+//				pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 			}
 			av_packet_free(&p_pkt);
 #endif
@@ -586,10 +582,6 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 		{
 			TRACE_ERR("av_read_frame() failed!%d\n", iRet);
 			av_packet_free(&p_pkt);
-			pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
-//			destory_client_list(pClientListHead);
-			list_destroy(plistRtspClient);
-			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 			break;
 		}
     }
@@ -598,10 +590,11 @@ End:
 	printf("avformat_close_input\n");
 	avformat_close_input(&in_fmt_ctx_v);
 	printf("avformat_close_input ok!\n");
-	pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
-	del_one_from_dev_list(pDevNode);
+	pthread_rwlock_wrlock(&rwlockMyLock);
+	list_destroy(plistRtspClient);
+	list_delete(&listDevList, (HB_VOID *)pDevNode);
 	pDevNode = NULL;
-	pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
+	pthread_rwlock_unlock(&rwlockMyLock);
 
 	TRACE_ERR("read video thread[%lu] exit!\n", thread_id);
 	return 0;

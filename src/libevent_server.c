@@ -149,10 +149,11 @@ static HB_VOID send_rtsp_to_server_event_error_cb(struct bufferevent *connect_rt
 	}
 	else //若没有启动，从此处释放
 	{
-		pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
+//		pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
 		bufferevent_disable(pClientNode->pSendVideoToServerEvent, EV_READ|EV_WRITE);
 		if (pMessengerArgsDev != NULL)
 		{
+			pthread_rwlock_wrlock(&rwlockMyLock);
 			if (pClientNode != NULL)
 			{
 //				printf("del one dev from dev_list!\n");
@@ -165,13 +166,15 @@ static HB_VOID send_rtsp_to_server_event_error_cb(struct bufferevent *connect_rt
 			{
 				//当前设备下如果已经没有用户了，那么需要把设备从设备链表摘除
 //				printf("del one dev from dev_list!\n");
-				del_one_from_dev_list(pMessengerArgsDev->pDevNode);
+//				del_one_from_dev_list(pMessengerArgsDev->pDevNode);
+				list_delete(&listDevList, (HB_VOID *)pMessengerArgsDev->pDevNode);
 				pMessengerArgsDev->pDevNode = NULL;
 			}
+			pthread_rwlock_unlock(&rwlockMyLock);
 			TRACE_ERR("send_rtsp_to_server_event_error_cb free pMessengerArgs\n");
 			free(pMessengerArgsDev);
 			pMessengerArgsDev = NULL;
-			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
+//			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 		}
 	}
 #if 0
@@ -214,16 +217,17 @@ static HB_VOID connect_to_rtsp_server_event_cb(struct bufferevent *pConnectRtspS
 		memset(pClientNode, 0, sizeof(CLIENT_LIST_OBJ));
 		pClientNode->pSendVideoToServerEvent = pConnectRtspServerBev;
 
-		pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
+//		pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
+		pthread_rwlock_wrlock(&rwlockMyLock);
 		//插入链表
 		list_append(plistRtspClient, (HB_VOID *)pClientNode);
+
 		//启动读取视频流线程
 		if (pDevNode->iStartThreadFlag == 0)
 		{
 			//如果当前设备还没有启动推流线程，则启动
 			pthread_create(&(pDevNode->threadReadVideoId), NULL, read_video_data_from_dev_task, (HB_VOID*)pDevNode);
 		}
-
 		LIBEVENT_ARGS_DEV_HANDLE pMessengerArgsDev = (LIBEVENT_ARGS_DEV_HANDLE)malloc(sizeof(LIBEVENT_ARGS_DEV_OBJ));
 		memset(pMessengerArgsDev, 0, sizeof(LIBEVENT_ARGS_DEV_OBJ));
 		pMessengerArgsDev->pDevNode = pDevNode;
@@ -236,7 +240,8 @@ static HB_VOID connect_to_rtsp_server_event_cb(struct bufferevent *pConnectRtspS
 		//设置连接出错后的回调函数
 		bufferevent_setcb(pConnectRtspServerBev, NULL, NULL, send_rtsp_to_server_event_error_cb, (HB_VOID *)pMessengerArgsDev);
 		bufferevent_enable(pConnectRtspServerBev, EV_WRITE);
-		pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
+		pthread_rwlock_unlock(&rwlockMyLock);
+//		pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 	}
 	else  //盒子connect rtsp服务器失败
 	{
@@ -246,10 +251,11 @@ static HB_VOID connect_to_rtsp_server_event_cb(struct bufferevent *pConnectRtspS
 		if (list_size(plistRtspClient) < 1)
 		{
 			//连接rtsp服务器失败，如果当前用户数为0，那么就将设备从链表中删除
-			pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
-			del_one_from_dev_list(pDevNode);
+			pthread_rwlock_wrlock(&rwlockMyLock);
+//			del_one_from_dev_list(pDevNode);
+			list_delete(&listDevList, (HB_VOID *)pDevNode);
 			pDevNode = NULL;
-			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
+			pthread_rwlock_unlock(&rwlockMyLock);
 		}
 
 		bufferevent_free(pConnectRtspServerBev);
@@ -268,27 +274,6 @@ static HB_VOID connect_to_rtsp_server_event_cb(struct bufferevent *pConnectRtspS
  */
 static HB_VOID connect_to_rtsp_server(HB_CHAR *pServerIp, HB_S32 iServerPort, DEV_LIST_HANDLE pDevNode)
 {
-#if 0
-	HB_CHAR arrServerIp[16] = {0};
-	HB_S32 iServerPort = 0;
-	struct sockaddr_in stServeraddr;
-	HB_S32 iServeraddrLen;
-	struct bufferevent *pSendVideoToServerEvent;//主动连接服务器事件
-
-	analysis_json_server_info(pCmdBuf, arrServerIp, &iServerPort);
-//	TRACE_LOG("rtsp_server_ip=[%s]\nrtsp_server_port=[%d]\n", arrServerIp, iServerPort);
-
-	pSendVideoToServerEvent = bufferevent_socket_new(pEventBase, -1, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS|BEV_OPT_THREADSAFE);
-	bzero(&stServeraddr, sizeof(stServeraddr));
-	stServeraddr.sin_family = AF_INET;
-	stServeraddr.sin_port = htons(iServerPort);
-	inet_pton(AF_INET, arrServerIp, &stServeraddr.sin_addr);
-	iServeraddrLen = sizeof(struct sockaddr_in);
-
-	bufferevent_setcb(pSendVideoToServerEvent, NULL, NULL, connect_to_rtsp_server_event_cb, (HB_VOID *)pDevNode);
-	bufferevent_socket_connect(pSendVideoToServerEvent, (struct sockaddr*)&stServeraddr, iServeraddrLen);
-#endif
-
 	struct sockaddr_in stServeraddr;
 	HB_S32 iServeraddrLen;
 	struct bufferevent *pSendVideoToServerEvent;//主动连接服务器事件
@@ -338,38 +323,8 @@ static HB_VOID deal_client_cmd_error_cb1(struct bufferevent *bev, short events, 
 		TRACE_ERR("######## deal_client_cmd_error_cb1 BEV_EVENT_TIMEOUT(%d) : %s !", err, evutil_socket_error_to_string(err));
 	}
 
-
-//	printf("deal_client_cmd_error_cb1 free bev!\n");
 	bufferevent_free(bev);
 	bev = NULL;
-
-//	if (pMessengerArgs != NULL)
-//	{
-//		if (pMessengerArgs->pDevNode != NULL)
-//		{
-//			printf("del one dev from dev_list!\n");
-//			pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
-//			del_one_from_dev_list(pMessengerArgs->pDevNode);
-//			pMessengerArgs->pDevNode = NULL;
-//			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
-//		}
-//		if (pMessengerArgs->pClientBev != NULL)
-//		{
-//			printf("bufferevent_free pClientBev!\n");
-//			bufferevent_free(pMessengerArgs->pClientBev);
-//			pMessengerArgs->pClientBev = NULL;
-//		}
-//		printf("deal_client_cmd_error_cb1 free pMessengerArgs\n");
-//		free(pMessengerArgs);
-//		pMessengerArgs = NULL;
-//	}
-//	else
-//	{
-//		printf("deal_client_cmd_error_cb1 free bev!\n");
-//		//伪代码
-//		bufferevent_free(bev);
-//	}
-
 }
 
 /*
@@ -417,48 +372,25 @@ static HB_S32 analysis_json_dev_info(char *p_SrcJson, char *pDevId, int *pDevChn
 }
 
 
-//根据网卡eth获取相应到mac地址
-static HB_S32 get_mac_dev(HB_CHAR *mac_sn, HB_CHAR *dev)
+//设备的查找器(从链表中查找当前设备是不是已经存在)
+static HB_S32 DevSeeker(const HB_VOID *pDevNode, const HB_VOID *key)
 {
-    struct ifreq tmp;
-    HB_S32 sock_mac;
-   // HB_CHAR *tmpflag;
-    //HB_CHAR mac_addr[30];
-    sock_mac = socket(AF_INET, SOCK_STREAM, 0);
-    if( sock_mac == -1)
-    {
-        return -1;
-    }
-    memset(&tmp,0,sizeof(tmp));
-    strncpy(tmp.ifr_name, dev, sizeof(tmp.ifr_name)-1 );
-    if( (ioctl( sock_mac, SIOCGIFHWADDR, &tmp)) < 0 )
-    {
-    	close(sock_mac);
-        return -1;
-    }
+	if ((pDevNode == NULL) || (key == NULL))
+	{
+		TRACE_ERR("called with NULL pointer: pDevNode=%p, key=%p", pDevNode, key);
+		return 0;
+	}
+	DEV_LIST_HANDLE pCurrentDev = (DEV_LIST_HANDLE)pDevNode;
+	DEV_INFO_HANDLE pKey = (DEV_INFO_HANDLE)key;
 
-    close(sock_mac);
-    memcpy(mac_sn, tmp.ifr_hwaddr.sa_data, 6);
-    return 0;
-}
-
-
-//获取盒子到序列号
-HB_S32 get_sys_sn(HB_CHAR *sn, HB_S32 sn_size)
-{
-	HB_U64 sn_num = 0;
-	HB_CHAR sn_mac[32] = {0};
-	HB_CHAR mac[32] = {0};
-	get_mac_dev(mac, ETH_X);
-	sprintf(sn_mac, "0x%02x%02x%02x%02x%02x%02x",
-			(HB_U8)mac[0],
-			(HB_U8)mac[1],
-			(HB_U8)mac[2],
-			(HB_U8)mac[3],
-			(HB_U8)mac[4],
-			(HB_U8)mac[5]);
-	sn_num = strtoull(sn_mac, 0, 16);
-	snprintf(sn, sn_size, "%llu", sn_num);
+	//设备id，通道号，主子码流一致才算找到设备
+	if ((strcmp(pCurrentDev->pDevId, pKey->pDevId) == 0) \
+		&& (pCurrentDev->iDevChnl == pKey->iDevChnl) \
+		&& (pCurrentDev->iDevStreamType == pKey->iDevStreamType))
+	{
+		TRACE_YELLOW("The device is already exist!\n");
+		return 1;
+	}
 
 	return 0;
 }
@@ -479,18 +411,25 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 	HB_CHAR accDevId[MAX_DEV_ID_LEN] = {0}; //设备ID
 	HB_CHAR accDevIdTmp[MAX_DEV_ID_LEN] = {0}; //设备ID
 	HB_CHAR accDevIdDecode[MAX_DEV_ID_LEN] = {0}; //设备ID
-	HB_CHAR cMacSn[32] = {0};
 
 	analysis_json_dev_info(pCmdBuf, accDevIdTmp, &iDevChnl, &iDevStreamType);
 	url_decode(accDevIdTmp, strlen(accDevIdTmp), accDevIdDecode, MAX_DEV_ID_LEN);
+	strncpy(accDevId, accDevIdDecode+16, MAX_DEV_ID_LEN);
 
 	TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", accDevIdDecode, iDevChnl, iDevStreamType);
 
-	memset(accDevIdDecode, 0, sizeof(accDevIdDecode));
-	strcpy(accDevIdDecode, "abcd");
-	pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
-//	pDevNode = find_in_dev_list(accDevIdDecode+16, iDevChnl, iDevStreamType);
-	pDevNode = find_in_dev_list(accDevIdDecode, iDevChnl, iDevStreamType);
+	memset(accDevId, 0, sizeof(accDevId));
+	strcpy(accDevId, "abcd");
+
+	DEV_INFO_OBJ stCurDev;
+	memset(&stCurDev, 0, sizeof(DEV_INFO_OBJ));
+
+	list_attributes_seeker(&listDevList, DevSeeker);
+	strncpy(stCurDev.pDevId, accDevId, sizeof(stCurDev.pDevId));
+	stCurDev.iDevChnl = iDevChnl;
+	stCurDev.iDevStreamType = iDevStreamType;
+	pthread_rwlock_wrlock(&rwlockMyLock);
+	pDevNode = list_seek(&listDevList, &stCurDev);
 	if (pDevNode == NULL)
 	{
 		//未找到设备
@@ -502,10 +441,6 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 		list_init(&(pDevNode->listRtspClient));
 		list_init(&(pDevNode->listWaitClient));
 
-		get_sys_sn(cMacSn, sizeof(cMacSn));
-//		strncpy(accDevId, accDevIdDecode+strlen(cMacSn)+1, MAX_DEV_ID_LEN);
-//		strncpy(accDevId, accDevIdDecode+16, MAX_DEV_ID_LEN);
-		strncpy(accDevId, accDevIdDecode, MAX_DEV_ID_LEN);
 		TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", accDevId, iDevChnl, iDevStreamType);
 		snprintf(sql, sizeof(sql), \
 			"select dev_ip,rtsp_port,dev_login_usr,dev_login_passwd,basic_authenticate,rtsp_list.rtsp_main,rtsp_list.rtsp_sub from onvif_dev_data left join rtsp_list on onvif_dev_data.dev_id='%s' where rtsp_list.[dev_id]=onvif_dev_data.dev_id and rtsp_list.[dev_chnl_num]='%d'", \
@@ -515,7 +450,7 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 			//数据库操作失败
 			free(pDevNode);
 			pDevNode = NULL;
-			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
+			pthread_rwlock_unlock(&rwlockMyLock);
 			TRACE_ERR("data_base[%s] exec[%s] failed!\n", DEV_DATA_BASE_NAME, sql);
 			return HB_FAILURE;
 		}
@@ -524,7 +459,7 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 			//设备不存在在本地数据库
 			free(pDevNode);
 			pDevNode = NULL;
-			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
+			pthread_rwlock_unlock(&rwlockMyLock);
 			TRACE_ERR("The device [%s] do not in the database!\n", accDevId);
 			return HB_FAILURE;
 		}
@@ -539,15 +474,13 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 				pDevNode->pDevId, pDevNode->iDevChnl, pDevNode->iDevStreamType, pDevNode->arrDevIp, \
 				pDevNode->iDevRtspPort);
 
-		add_to_dev_list(pDevNode);
+		list_append(&listDevList, pDevNode);
 		//添加到等待用户链表
 		WAIT_CLIENT_LIST_HANDLE pNewWaitClientNode = (WAIT_CLIENT_LIST_HANDLE)malloc(sizeof(WAIT_CLIENT_LIST_OBJ));
 		memset(pNewWaitClientNode, 0, sizeof(WAIT_CLIENT_LIST_OBJ));
 		pNewWaitClientNode->pWaitClientBev = pClientBev;
-//		add_wait_client_in_tail(&(pDevNode->stWaitClientHead), pNewWaitClientNode);
 		list_append(&(pDevNode->listWaitClient), (HB_VOID *)pNewWaitClientNode);
-		//添加到等待用户链表END
-		pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
+		pthread_rwlock_unlock(&rwlockMyLock);
 		test_dev_connection(pDevNode);
 	}
 	else
@@ -555,6 +488,7 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 		//设备已存在，判断设备连接状态
 		if(pDevNode->enumDevConnectStatus == CONNECTED) //已连接
 		{
+			pthread_rwlock_unlock(&rwlockMyLock);
 			BOX_CTRL_CMD_OBJ st_MsgHead;
 			HB_CHAR arr_SendBuf[2048] = {0};
 			memset(&st_MsgHead, 0, sizeof(st_MsgHead));
@@ -578,10 +512,10 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 
 			pNewWaitClientNode->pWaitClientBev = pClientBev;
 			//如果设备还在连接中，将设备插入等待链表
-//			add_wait_client_in_tail(&(pDevNode->stWaitClientHead), pNewWaitClientNode);
 			list_append(&(pDevNode->listWaitClient), (HB_VOID *)pNewWaitClientNode);
+			printf("add add add add add add add add %d\n", list_size(&(pDevNode->listWaitClient)));
+			pthread_rwlock_unlock(&rwlockMyLock);
 		}
-		pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 	}
 
 	return 0;
@@ -643,7 +577,6 @@ static HB_S32 push_stream(HB_CHAR *pCmdBuf, struct bufferevent *pClientBev)
 	HB_CHAR arrDevId[MAX_DEV_ID_LEN] = {0}; //设备ID
 	HB_CHAR arrDevIdTmp[MAX_DEV_ID_LEN] = {0}; //设备ID
 	HB_CHAR arrDevIdDecode[MAX_DEV_ID_LEN] = {0}; //设备ID
-	HB_CHAR cMacSn[32] = {0};
 
 	cJSON *pRoot;
 	pRoot = cJSON_Parse(pCmdBuf);
@@ -661,10 +594,20 @@ static HB_S32 push_stream(HB_CHAR *pCmdBuf, struct bufferevent *pClientBev)
 	iDevStreamType = pStreamType->valueint;
 
 	url_decode(arrDevIdTmp, strlen(arrDevIdTmp), arrDevIdDecode, MAX_DEV_ID_LEN);
+	strncpy(arrDevId, arrDevIdDecode+16, MAX_DEV_ID_LEN);
 	TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", arrDevIdDecode, iDevChnl, iDevStreamType);
+	DEV_INFO_OBJ stCurDev;
+	memset(&stCurDev, 0, sizeof(DEV_INFO_OBJ));
 
-	pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
-	pDevNode = find_in_dev_list(arrDevIdDecode+16, iDevChnl, iDevStreamType);
+	list_attributes_seeker(&listDevList, DevSeeker);
+
+	strncpy(stCurDev.pDevId, arrDevId, sizeof(stCurDev.pDevId));
+	stCurDev.iDevChnl = iDevChnl;
+	stCurDev.iDevStreamType = iDevStreamType;
+
+	pthread_rwlock_rdlock(&rwlockMyLock);
+//	pDevNode = find_in_dev_list(arrDevId, iDevChnl, iDevStreamType);
+	pDevNode = list_seek(&listDevList, &stCurDev);
 	if (pDevNode == NULL)
 	{
 		//未找到设备
@@ -672,10 +615,6 @@ static HB_S32 push_stream(HB_CHAR *pCmdBuf, struct bufferevent *pClientBev)
 		pDevNode = (DEV_LIST_HANDLE)malloc(sizeof(DEV_LIST_OBJ));
 		memset(pDevNode, 0, sizeof(DEV_LIST_OBJ));
 
-		get_sys_sn(cMacSn, sizeof(cMacSn));
-//		printf("cMacSn:[%s]\n", cMacSn);
-//		strncpy(accDevId, accDevIdDecode+strlen(cMacSn)+1, MAX_DEV_ID_LEN);
-		strncpy(arrDevId, arrDevIdDecode+16, MAX_DEV_ID_LEN);
 		TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", arrDevId, iDevChnl, iDevStreamType);
 		snprintf(sql, sizeof(sql), \
 			"select dev_ip,rtsp_port,dev_login_usr,dev_login_passwd,basic_authenticate,rtsp_list.rtsp_main,rtsp_list.rtsp_sub from onvif_dev_data left join rtsp_list on onvif_dev_data.dev_id='%s' where rtsp_list.[dev_id]=onvif_dev_data.dev_id and rtsp_list.[dev_chnl_num]='%d'", \
@@ -685,7 +624,7 @@ static HB_S32 push_stream(HB_CHAR *pCmdBuf, struct bufferevent *pClientBev)
 			//数据库操作失败
 			free(pDevNode);
 			pDevNode = NULL;
-			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
+			pthread_rwlock_unlock(&rwlockMyLock);
 			TRACE_ERR("data_base[%s] exec[%s] failed!\n", DEV_DATA_BASE_NAME, sql);
 			return HB_FAILURE;
 		}
@@ -694,7 +633,7 @@ static HB_S32 push_stream(HB_CHAR *pCmdBuf, struct bufferevent *pClientBev)
 			//设备不存在在本地数据库
 			free(pDevNode);
 			pDevNode = NULL;
-			pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
+			pthread_rwlock_unlock(&rwlockMyLock);
 			TRACE_ERR("The device [%s] do not in the database!\n", arrDevId);
 			return HB_FAILURE;
 		}
@@ -707,17 +646,15 @@ static HB_S32 push_stream(HB_CHAR *pCmdBuf, struct bufferevent *pClientBev)
 				pDevNode->pDevId, pDevNode->iDevChnl, pDevNode->iDevStreamType, pDevNode->arrDevIp, \
 				pDevNode->iDevRtspPort);
 
-		add_to_dev_list(pDevNode);
-		pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
-//		bufferevent_free(pClientBev);
-//		pClientBev = NULL;
+		list_append(&listDevList, pDevNode);
+		pthread_rwlock_unlock(&rwlockMyLock);
 		connect_to_rtsp_server(arrServerIp, iServerPort, pDevNode);
 	}
 	else
 	{
 		//设备已存在，判断设备连接状态
+		pthread_rwlock_unlock(&rwlockMyLock);
 		connect_to_rtsp_server(arrServerIp, iServerPort, pDevNode);
-		pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 	}
 
 	return HB_SUCCESS;
@@ -725,7 +662,7 @@ static HB_S32 push_stream(HB_CHAR *pCmdBuf, struct bufferevent *pClientBev)
 
 
 /*
- *	Function: 收到推流命令
+ *	Function: 收到停止推流命令
  *
  *	@param pCmdBuf: [IN]命令字符串（json格式）
  *	@param pClientBev: [IN]客户端连接过来的事件句柄
@@ -750,10 +687,6 @@ static HB_S32 stop_stream(HB_CHAR *pCmdBuf, struct bufferevent *pClientBev)
 	pRoot = cJSON_Parse(pCmdBuf);
 	cJSON *pProtocol = cJSON_GetObjectItem(pRoot, "protocol");
 	strncpy(arrProtocol, pProtocol->valuestring, sizeof(arrProtocol)); //rtsp或hls
-	cJSON *pServerIp = cJSON_GetObjectItem(pRoot, "serverIp");
-	strncpy(arrServerIp, pServerIp->valuestring, sizeof(arrServerIp));
-	cJSON *pServerPort = cJSON_GetObjectItem(pRoot, "serverPort");
-	iServerPort = pServerPort->valueint;
 	cJSON *pDevId = cJSON_GetObjectItem(pRoot, "devId");
 	strncpy(arrDevIdTmp, pDevId->valuestring, sizeof(arrDevIdTmp));
 	cJSON *pDevChnl = cJSON_GetObjectItem(pRoot, "devChnl");

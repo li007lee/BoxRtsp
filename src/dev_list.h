@@ -9,7 +9,6 @@
 #define SRC_DEV_LIST_H_
 
 #include "my_include.h"
-
 #include "simclist.h"
 
 #define MAX_DEV_ID_LEN	256
@@ -27,9 +26,6 @@ typedef struct _tagCLIENT_LIST
 typedef struct WAIT_CLIENT_LIST
 {
 	struct bufferevent *pWaitClientBev;
-
-	struct WAIT_CLIENT_LIST *pNext;
-	struct WAIT_CLIENT_LIST *pPrev;
 }WAIT_CLIENT_LIST_OBJ, *WAIT_CLIENT_LIST_HANDLE;
 
 
@@ -42,10 +38,17 @@ typedef enum _DEV_CONNECT_STATUS
 	NONE			//未连接s
 }DEV_CONNECT_STATUS;
 
+typedef struct _tagDEV_LIST_INFO
+{
+	HB_CHAR pDevId[MAX_DEV_ID_LEN];	//设备ID
+	HB_S32 iDevChnl;		//设备通道号
+	HB_S32 iDevStreamType;	//设备主子码流
+}DEV_INFO_OBJ, *DEV_INFO_HANDLE;
+
 //具体记载设备信息的结构体
 typedef struct _tagDEV_LIST
 {
-	HB_CHAR pDevId[256];	//设备ID
+	HB_CHAR pDevId[MAX_DEV_ID_LEN];	//设备ID
 	HB_S32 iDevChnl;		//设备通道号
 	HB_S32 iDevStreamType;	//设备主子码流
 	HB_CHAR arrDevIp[16];	//设备ip
@@ -73,30 +76,9 @@ typedef struct _tagDEV_LIST
 	DEV_CONNECT_STATUS enumDevConnectStatus; //设备连接状态
 	list_t listRtspClient; //用户链表， CLIENT_LIST_OBJ类型结构体
 	list_t listWaitClient; //等待连接的用户链表， WAIT_CLIENT_LIST_OBJ类型结构体
-
-	struct _tagDEV_LIST *pPrev;
-	struct _tagDEV_LIST *pNext;
 }DEV_LIST_OBJ, *DEV_LIST_HANDLE;
 
-//设备链表结构体头，程序启动时初始化
-typedef struct _tagDEV_LIST_HEAD
-{
-	HB_S32	iDevNum;//当前设备链表中设备的个数
-
-	DEV_LIST_HANDLE pDevListFirst;	//指向设备链表头结点
-	DEV_LIST_HANDLE pDevListLast;	//指向设备链表尾结点
-
-	pthread_mutex_t	mutexDevListMutex;	 //设备链表互斥所
-}DEV_LIST_HEAD_OBJ, *DEV_LIST_HEAD_HANDLE;
-
-
-
-DEV_LIST_HEAD_OBJ stDevListHead;
-
-HB_VOID init_dev_list();
-HB_VOID add_to_dev_list(DEV_LIST_HANDLE pNewNode);
-HB_S32 del_one_from_dev_list(DEV_LIST_HANDLE pDelNode);
-DEV_LIST_HANDLE find_in_dev_list(HB_CHAR *pDevID, HB_S32 iDevChnl, HB_S32 iDevStreamType);
-
+list_t listDevList;
+pthread_rwlock_t rwlockMyLock;	 //全局读写锁
 
 #endif /* SRC_DEV_LIST_H_ */

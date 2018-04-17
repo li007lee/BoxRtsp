@@ -328,7 +328,8 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 
 	time_t  time_now = time(NULL);
 
-    int ret, i;
+    int i;
+    HB_S32 iRet = 0;
     int videoindex_v=-1;
     int audioindex_a=-1;
 
@@ -363,13 +364,13 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
     }
 
     printf("OpenRtspUrl[%s]\n", arrOpenRtspUrl);
-    ret = avformat_open_input(&in_fmt_ctx_v, arrOpenRtspUrl, NULL, &options);
-    if(ret != 0)
+    iRet = avformat_open_input(&in_fmt_ctx_v, arrOpenRtspUrl, NULL, &options);
+    if(iRet != 0)
     {
-    	ret = avformat_open_input(&in_fmt_ctx_v, arrOpenRtspUrl, NULL, NULL);
-        if(ret != 0)
+    	iRet = avformat_open_input(&in_fmt_ctx_v, arrOpenRtspUrl, NULL, NULL);
+        if(iRet != 0)
         {
-			printf("\n0000000000000avformat_open_input failed ret=%d\n", ret);
+			printf("\n0000000000000avformat_open_input failed ret=%d\n", iRet);
 			av_dict_free(&options);
 			goto End;
         }
@@ -408,7 +409,11 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 	HB_S64 iIFlag = 0; //由于前几帧的pts经常出错，此变量用于忽略第两个个I帧，从第三I帧开始发送数据
     HB_S32 iCount = 0;
     HB_S64 llPtsOld = 0;
-    int iRet = 0;
+    HB_S32 iWriteBufLen = 0;
+	BOX_CTRL_CMD_OBJ send_cmd;
+	memset(&send_cmd, 0, sizeof(BOX_CTRL_CMD_OBJ));
+	strncpy(send_cmd.header, "hBzHbox@", 8);
+
     while (1)
     {
     	if(list_size(plistRtspClient) < 1)
@@ -505,9 +510,6 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 			}
 
 #if 1
-			BOX_CTRL_CMD_OBJ send_cmd;
-			HB_S32 iWriteBufLen = 0;
-			memset(&send_cmd, 0, sizeof(BOX_CTRL_CMD_OBJ));
 			send_cmd.cmd_type = BOX_VIDEO_DATA;
 			if(1 == p_pkt->flags)
 			{
@@ -518,7 +520,6 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 				send_cmd.data_type = BP_FRAME;
 			}
 			send_cmd.cmd_length = p_pkt->size;
-	//		send_cmd.pts = pkt->pts;
 
 			for (i=0;i<list_size(plistRtspClient);i++)
 			{

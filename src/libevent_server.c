@@ -217,11 +217,9 @@ static HB_VOID connect_to_rtsp_server_event_cb(struct bufferevent *pConnectRtspS
 		memset(pClientNode, 0, sizeof(CLIENT_LIST_OBJ));
 		pClientNode->pSendVideoToServerEvent = pConnectRtspServerBev;
 
-//		pthread_mutex_lock(&(stDevListHead.mutexDevListMutex));
 		pthread_rwlock_wrlock(&rwlockMyLock);
 		//插入链表
 		list_append(plistRtspClient, (HB_VOID *)pClientNode);
-
 		//启动读取视频流线程
 		if (pDevNode->iStartThreadFlag == 0)
 		{
@@ -595,7 +593,7 @@ static HB_S32 push_stream(HB_CHAR *pCmdBuf, struct bufferevent *pClientBev)
 
 	url_decode(arrDevIdTmp, strlen(arrDevIdTmp), arrDevIdDecode, MAX_DEV_ID_LEN);
 	strncpy(arrDevId, arrDevIdDecode+16, MAX_DEV_ID_LEN);
-	TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", arrDevIdDecode, iDevChnl, iDevStreamType);
+//	TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", arrDevIdDecode, iDevChnl, iDevStreamType);
 	DEV_INFO_OBJ stCurDev;
 	memset(&stCurDev, 0, sizeof(DEV_INFO_OBJ));
 
@@ -606,7 +604,6 @@ static HB_S32 push_stream(HB_CHAR *pCmdBuf, struct bufferevent *pClientBev)
 	stCurDev.iDevStreamType = iDevStreamType;
 
 	pthread_rwlock_rdlock(&rwlockMyLock);
-//	pDevNode = find_in_dev_list(arrDevId, iDevChnl, iDevStreamType);
 	pDevNode = list_seek(&listDevList, &stCurDev);
 	if (pDevNode == NULL)
 	{
@@ -614,6 +611,7 @@ static HB_S32 push_stream(HB_CHAR *pCmdBuf, struct bufferevent *pClientBev)
 		HB_CHAR sql[1024] = {0};
 		pDevNode = (DEV_LIST_HANDLE)malloc(sizeof(DEV_LIST_OBJ));
 		memset(pDevNode, 0, sizeof(DEV_LIST_OBJ));
+		list_init(&(pDevNode->listRtspClient));
 
 		TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", arrDevId, iDevChnl, iDevStreamType);
 		snprintf(sql, sizeof(sql), \
@@ -768,7 +766,7 @@ HB_VOID deal_client_cmd(struct bufferevent *pClientBev, void *arg)
 
 	if(evbuffer_get_length(src) < (ntohl(stMsgHead.cmd_length) + sizeof(BOX_CTRL_CMD_OBJ)))
 	{
-		printf("\n2222222222recv len=%d   msg_len=%d\n", evbuffer_get_length(src), ntohl(stMsgHead.cmd_length));
+		printf("\n2222222222recv len=%d   msg_len=%d\n", (HB_S32)evbuffer_get_length(src), (HB_S32)(ntohl(stMsgHead.cmd_length)));
 //		struct timeval tv_read;
 //	    tv_read.tv_sec  = 5;//10秒超时时间,接收到新的连接后，10秒内没收到任何数据，则用accept_client_event_cb回调函数处理
 //	    tv_read.tv_usec = 0;

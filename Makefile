@@ -1,5 +1,5 @@
-BOX_TYPE?=pc_x86
-#BOX_TYPE?=pc_x86_64
+#BOX_TYPE?=pc_x86
+BOX_TYPE?=pc_x86_64
 #BOX_TYPE?=hisi_v100
 
 ifeq ($(BOX_TYPE), pc_x86)
@@ -25,7 +25,7 @@ LIBS :=  -L./lib/X86_64 \
 			-lavcodec -lavfilter -lswscale -lavutil -lswresample -lm -ldl -lpthread -lrt
 
 APPBIN = BoxRtsp_X86_64
-DEST_BIN = /mnt/hgfs/share_dir/nfs_dir/BoxRtsp/bin
+DEST_BIN = /mnt/hgfs/nfs_dir/share_dir/hb/BoxRtsp/bin
 endif
 
 ifeq ($(BOX_TYPE), hisi_v100)

@@ -116,7 +116,7 @@ typedef enum _tagHB_BOOL
 #define FALSE   0
 
 #define BOX_SERVER_PORT 8109
-#define LIBEVENT_WRITE_BUF_SIZE		(2097152) //2M
+#define LIBEVENT_WRITE_BUF_SIZE		(2097152) //20M
 //#define LIBEVENT_WRITE_BUF_SIZE		(1048576) //1M
 
 #define ETH_X	"eth0"

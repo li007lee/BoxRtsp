@@ -12,6 +12,7 @@
 #include "simclist.h"
 
 struct event_base *pEventBase;
+extern HB_CHAR	 glBoxSn[32];
 
 /****************************************数据库操作****************************************/
 /****************************************数据库操作****************************************/
@@ -412,12 +413,13 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 
 	analysis_json_dev_info(pCmdBuf, accDevIdTmp, &iDevChnl, &iDevStreamType);
 	url_decode(accDevIdTmp, strlen(accDevIdTmp), accDevIdDecode, MAX_DEV_ID_LEN);
-	strncpy(accDevId, accDevIdDecode+16, MAX_DEV_ID_LEN);
+//	strncpy(accDevId, accDevIdDecode+strlen(glBoxSn), MAX_DEV_ID_LEN);
+	strncpy(accDevId, accDevIdDecode, MAX_DEV_ID_LEN);
 
 	TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", accDevIdDecode, iDevChnl, iDevStreamType);
 
-	memset(accDevId, 0, sizeof(accDevId));
-	strcpy(accDevId, "abcd");
+//	memset(accDevId, 0, sizeof(accDevId));
+//	strcpy(accDevId, "abcd");
 
 	DEV_INFO_OBJ stCurDev;
 	memset(&stCurDev, 0, sizeof(DEV_INFO_OBJ));
@@ -592,7 +594,7 @@ static HB_S32 push_stream(HB_CHAR *pCmdBuf, struct bufferevent *pClientBev)
 	iDevStreamType = pStreamType->valueint;
 
 	url_decode(arrDevIdTmp, strlen(arrDevIdTmp), arrDevIdDecode, MAX_DEV_ID_LEN);
-	strncpy(arrDevId, arrDevIdDecode+16, MAX_DEV_ID_LEN);
+	strncpy(arrDevId, arrDevIdDecode+strlen(glBoxSn), MAX_DEV_ID_LEN);
 //	TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", arrDevIdDecode, iDevChnl, iDevStreamType);
 	DEV_INFO_OBJ stCurDev;
 	memset(&stCurDev, 0, sizeof(DEV_INFO_OBJ));
@@ -726,6 +728,7 @@ static HB_S32 stop_stream(HB_CHAR *pCmdBuf, struct bufferevent *pClientBev)
 }
 
 
+//extern char cServerIp[16];
 /*
  *	Function: 读取回调函数,用于处理接从客户端接收到的信令，并根据信令能容做相应处理
  *
@@ -767,18 +770,11 @@ HB_VOID deal_client_cmd(struct bufferevent *pClientBev, void *arg)
 	if(evbuffer_get_length(src) < (ntohl(stMsgHead.cmd_length) + sizeof(BOX_CTRL_CMD_OBJ)))
 	{
 		printf("\n2222222222recv len=%d   msg_len=%d\n", (HB_S32)evbuffer_get_length(src), (HB_S32)(ntohl(stMsgHead.cmd_length)));
-//		struct timeval tv_read;
-//	    tv_read.tv_sec  = 5;//10秒超时时间,接收到新的连接后，10秒内没收到任何数据，则用accept_client_event_cb回调函数处理
-//	    tv_read.tv_usec = 0;
-//		bufferevent_set_timeouts(buf_bev, &tv_read, NULL);
-//		bufferevent_setcb(buf_bev, accept_client_read_cb, NULL, accept_client_event_cb, NULL);
-//		bufferevent_enable(buf_bev, EV_READ);
 		return;
 	}
 	bufferevent_read(pClientBev, (HB_VOID*)(arrcRecvCmdBuf), (ntohl(stMsgHead.cmd_length) + sizeof(BOX_CTRL_CMD_OBJ)));
 	bufferevent_disable(pClientBev, EV_READ);
 
-//	printf("\n11112222222222recv len=%d   msg_len=%d\n buf:[%s]\n", evbuffer_get_length(src), ntohl(stMsgHead.cmd_length), arrcRecvCmdBuf + sizeof(BOX_CTRL_CMD_OBJ));
 	pPos = arrcRecvCmdBuf+sizeof(BOX_CTRL_CMD_OBJ);
 	cJSON *pRoot;
 	pRoot = cJSON_Parse(pPos);
@@ -817,7 +813,10 @@ HB_VOID deal_client_cmd(struct bufferevent *pClientBev, void *arg)
 		//创建线程并发送数据
 		bufferevent_free(pClientBev);
 		pClientBev = NULL;
+		printf("cServerIp:[%s], iServerPort=%d\n", arrServerIp, iServerPort);
 		connect_to_rtsp_server(arrServerIp, iServerPort, (DEV_LIST_HANDLE)arg);
+//		printf("cServerIp:[%s], iServerPort=%d\n", cServerIp, iServerPort);
+//		connect_to_rtsp_server(cServerIp, iServerPort, (DEV_LIST_HANDLE)arg);
 	}
 	else
 	{

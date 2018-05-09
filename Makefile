@@ -1,6 +1,7 @@
 #BOX_TYPE?=pc_x86
-BOX_TYPE?=pc_x86_64
+#BOX_TYPE?=pc_x86_64
 #BOX_TYPE?=hisi_v100
+BOX_TYPE?=hisi_v300
 
 ifeq ($(BOX_TYPE), pc_x86)
 CC=gcc
@@ -41,6 +42,19 @@ APPBIN = box_rtsp_h100
 DEST_BIN = /mnt/hgfs/nfs_dir/share_dir/hb/BoxRtsp/bin
 endif
 
+ifeq ($(BOX_TYPE), hisi_v300)
+CC=arm-hisiv300-linux-gcc
+STRIP=arm-hisiv300-linux-strip
+CFLAGS = -Wall -O2
+INC_PATH = -I./inc
+LIBS :=  -L./lib/hisiv300 \
+			-levent -levent_pthreads -lsqlite3 -lavformat \
+			-lavcodec -lavfilter -lswscale -lavutil -lswresample -lm -ldl -lpthread -lrt
+
+APPBIN = box_rtsp_h300
+DEST_BIN = /mnt/hgfs/nfs_dir/share_dir/hb/BoxRtsp/bin
+endif
+
 
 
 SRCS = $(wildcard ./src/*.c)
@@ -52,4 +66,4 @@ all:
 	cp $(APPBIN) $(DEST_BIN)/$(APPBIN)
 	mv $(APPBIN) ./bin/
 clean:
-	rm -rf $(OBJS) ./bin/$(APPBIN)
+	rm -rf $(OBJS) ./bin/$(APPBIN) $(DEST_BIN)/$(APPBIN)

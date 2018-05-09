@@ -12,7 +12,9 @@
 #include "dev_opt.h"
 #include "dev_list.h"
 
-//char cServerIp[16] = {0};
+#ifdef HAND_SERVER_IP
+HB_CHAR cServerIp[16] = {0};
+#endif
 HB_CHAR	 glBoxSn[32] = {0}; //盒子序列号
 
 
@@ -32,8 +34,15 @@ int main(int argc, char **argv)
 	}
 
 	get_sys_sn(glBoxSn, sizeof(glBoxSn));
-//	strncpy(cServerIp, argv[1], 16);
 
+#ifdef HAND_SERVER_IP
+	if (argc < 2)
+	{
+		printf("usage : ./a.out [server_ip]\n");
+		return -1;
+	}
+	strncpy(cServerIp, argv[1], 16);
+#endif
 	av_register_all();
 	avformat_network_init();
 

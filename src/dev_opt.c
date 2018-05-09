@@ -550,10 +550,13 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 			}
 			send_cmd.cmd_length = p_pkt->size;
 
+			HB_S32 iClientNum = list_size(plistRtspClient);
+//			printf("client num = %d\n", iClientNum);
+
 			pthread_rwlock_wrlock(&rwlockMyLock);
-			for (i = 0; i < list_size(plistRtspClient); i++)
+			for (i = 0; i < iClientNum; ++i)
 			{
-				CLIENT_LIST_HANDLE pIndexClientNode = (CLIENT_LIST_HANDLE) list_get_at(plistRtspClient, i);
+				CLIENT_LIST_HANDLE pIndexClientNode = (CLIENT_LIST_HANDLE)list_get_at(plistRtspClient, i);
 				if (pIndexClientNode->iDelFlag == 1)
 				{
 					if (pIndexClientNode->pSendVideoToServerEvent != NULL)
@@ -561,7 +564,8 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 						bufferevent_free(pIndexClientNode->pSendVideoToServerEvent);
 						pIndexClientNode->pSendVideoToServerEvent = NULL;
 						list_delete(plistRtspClient, (HB_VOID *) pIndexClientNode);
-						i--;
+						--i;
+						--iClientNum;
 						TRACE_YELLOW("\n###########  total client total client total client total client== [%d]!\n", list_size(plistRtspClient));
 					}
 				}
@@ -575,7 +579,7 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 						//如果当前缓冲区的空间不足以存储一帧数据，则丢帧(清空当前缓冲区) evbuffer_drain用于清空缓冲区
 						evbuffer_drain(bufferevent_get_output(pIndexClientNode->pSendVideoToServerEvent), iWriteBufLen);
 						pIndexClientNode->iMissFrameFlag = 1;
-						pthread_rwlock_unlock(&rwlockMyLock);
+//						pthread_rwlock_unlock(&rwlockMyLock);
 //						pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
 						continue;
 					}
@@ -583,18 +587,18 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 					{
 						//若缓冲区未满，则判断是否丢过帧，若丢过帧则需要将p帧丢弃，从I帧开始发送
 						if ((1 == pIndexClientNode->iMissFrameFlag) && (1 != p_pkt->flags))
-						{
+						{;
 							//丢过帧且当前不是I帧，此帧丢弃
 //							printf("miss miss miss miss miss miss frame!\n");
 //							pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
-							pthread_rwlock_unlock(&rwlockMyLock);
+//							pthread_rwlock_unlock(&rwlockMyLock);
 							continue;
 						}
 					}
 
 					//获取写缓冲的缓冲区大小
-					//				int len = bufferevent_get_max_to_write(pIndexClientNode->pSendVideoToServerEvent);
-					//				printf("############size:%d\n", len);
+//					int len = bufferevent_get_max_to_write(pIndexClientNode->pSendVideoToServerEvent);
+//					printf("%p############size:%d\n", pIndexClientNode->pSendVideoToServerEvent, len);
 					pIndexClientNode->iMissFrameFlag = 0;
 					pIndexClientNode->pts += pDevNode->iPtsRateInterval;
 					send_cmd.pts = pIndexClientNode->pts;
@@ -602,11 +606,11 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 					//				send_cmd.uiVideoUsec = (HB_U32)(((pIndexClientNode->pts/90)%1000)*1000);
 					bufferevent_write(pIndexClientNode->pSendVideoToServerEvent, &send_cmd, sizeof(BOX_CTRL_CMD_OBJ));
 					bufferevent_write(pIndexClientNode->pSendVideoToServerEvent, p_pkt->data, p_pkt->size);
-					//				printf("data_type:[%d] ------> data_size:[%d] ------>pts:[%lld]\n", send_cmd.data_type, pkt->size, send_cmd.pts);
+//					printf("%pdata_type:[%d] ------> data_size:[%d] ------>pts:[%lld]\n", pIndexClientNode->pSendVideoToServerEvent, send_cmd.data_type, p_pkt->size, send_cmd.pts);
 				}
 //				pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
-				pthread_rwlock_unlock(&rwlockMyLock);
 			}
+			pthread_rwlock_unlock(&rwlockMyLock);
 			av_packet_free(&p_pkt);
 #endif
 		}

@@ -1,7 +1,7 @@
 #BOX_TYPE?=pc_x86
-#BOX_TYPE?=pc_x86_64
+BOX_TYPE?=pc_x86_64
 #BOX_TYPE?=hisi_v100
-BOX_TYPE?=hisi_v300
+#BOX_TYPE?=hisi_v300
 
 ifeq ($(BOX_TYPE), pc_x86)
 CC=gcc

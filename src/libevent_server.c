@@ -13,6 +13,7 @@
 
 struct event_base *pEventBase;
 extern HB_CHAR	 glBoxSn[32];
+extern HB_CHAR cServerIp[16];
 
 /****************************************数据库操作****************************************/
 /****************************************数据库操作****************************************/
@@ -418,8 +419,10 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 
 	TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", accDevIdDecode, iDevChnl, iDevStreamType);
 
-//	memset(accDevId, 0, sizeof(accDevId));
-//	strcpy(accDevId, "abcd");
+#ifdef HAND_SERVER_IP
+	memset(accDevId, 0, sizeof(accDevId));
+	strcpy(accDevId, "DS-2CD1201D-I320170526AACH766877798");
+#endif
 
 	DEV_INFO_OBJ stCurDev;
 	memset(&stCurDev, 0, sizeof(DEV_INFO_OBJ));
@@ -605,7 +608,7 @@ static HB_S32 push_stream(HB_CHAR *pCmdBuf, struct bufferevent *pClientBev)
 	stCurDev.iDevChnl = iDevChnl;
 	stCurDev.iDevStreamType = iDevStreamType;
 
-	pthread_rwlock_rdlock(&rwlockMyLock);
+	pthread_rwlock_wrlock(&rwlockMyLock);
 	pDevNode = list_seek(&listDevList, &stCurDev);
 	if (pDevNode == NULL)
 	{
@@ -813,10 +816,14 @@ HB_VOID deal_client_cmd(struct bufferevent *pClientBev, void *arg)
 		//创建线程并发送数据
 		bufferevent_free(pClientBev);
 		pClientBev = NULL;
+
+#ifdef HAND_SERVER_IP
+		printf("cServerIp:[%s], iServerPort=%d\n", cServerIp, iServerPort);
+		connect_to_rtsp_server(cServerIp, iServerPort, (DEV_LIST_HANDLE)arg);
+#else
 		printf("cServerIp:[%s], iServerPort=%d\n", arrServerIp, iServerPort);
 		connect_to_rtsp_server(arrServerIp, iServerPort, (DEV_LIST_HANDLE)arg);
-//		printf("cServerIp:[%s], iServerPort=%d\n", cServerIp, iServerPort);
-//		connect_to_rtsp_server(cServerIp, iServerPort, (DEV_LIST_HANDLE)arg);
+#endif
 	}
 	else
 	{

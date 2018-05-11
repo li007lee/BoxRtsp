@@ -10,10 +10,10 @@
 #include "dev_opt.h"
 #include "url_code.h"
 #include "simclist.h"
+#include "common.h"
 
+extern GLOBLE_PARAM glParam;
 struct event_base *pEventBase;
-extern HB_CHAR	 glBoxSn[32];
-extern HB_CHAR cServerIp[16];
 
 /****************************************数据库操作****************************************/
 /****************************************数据库操作****************************************/
@@ -414,8 +414,8 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 
 	analysis_json_dev_info(pCmdBuf, accDevIdTmp, &iDevChnl, &iDevStreamType);
 	url_decode(accDevIdTmp, strlen(accDevIdTmp), accDevIdDecode, MAX_DEV_ID_LEN);
-//	strncpy(accDevId, accDevIdDecode+strlen(glBoxSn), MAX_DEV_ID_LEN);
-	strncpy(accDevId, accDevIdDecode, MAX_DEV_ID_LEN);
+	strncpy(accDevId, accDevIdDecode+glParam.iMacSnLen, MAX_DEV_ID_LEN);
+//	strncpy(accDevId, accDevIdDecode, MAX_DEV_ID_LEN);
 
 	TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", accDevIdDecode, iDevChnl, iDevStreamType);
 
@@ -597,7 +597,7 @@ static HB_S32 push_stream(HB_CHAR *pCmdBuf, struct bufferevent *pClientBev)
 	iDevStreamType = pStreamType->valueint;
 
 	url_decode(arrDevIdTmp, strlen(arrDevIdTmp), arrDevIdDecode, MAX_DEV_ID_LEN);
-	strncpy(arrDevId, arrDevIdDecode+strlen(glBoxSn), MAX_DEV_ID_LEN);
+	strncpy(arrDevId, arrDevIdDecode+glParam.iMacSnLen, MAX_DEV_ID_LEN);
 //	TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", arrDevIdDecode, iDevChnl, iDevStreamType);
 	DEV_INFO_OBJ stCurDev;
 	memset(&stCurDev, 0, sizeof(DEV_INFO_OBJ));
@@ -818,8 +818,8 @@ HB_VOID deal_client_cmd(struct bufferevent *pClientBev, void *arg)
 		pClientBev = NULL;
 
 #ifdef HAND_SERVER_IP
-		printf("cServerIp:[%s], iServerPort=%d\n", cServerIp, iServerPort);
-		connect_to_rtsp_server(cServerIp, iServerPort, (DEV_LIST_HANDLE)arg);
+		printf("cServerIp:[%s], iServerPort=%d\n", glParam.cServerIp, iServerPort);
+		connect_to_rtsp_server(glParam.cServerIp, iServerPort, (DEV_LIST_HANDLE)arg);
 #else
 		printf("cServerIp:[%s], iServerPort=%d\n", arrServerIp, iServerPort);
 		connect_to_rtsp_server(arrServerIp, iServerPort, (DEV_LIST_HANDLE)arg);
@@ -970,8 +970,8 @@ static HB_VOID accept_client_connect_cb(struct evconnlistener *pListener, evutil
     //设置超时，5秒内未收到对端发来数据则断开连接
     tv_read.tv_sec  = 10;
     tv_read.tv_usec = 0;
-	//注意，在盒子连接设备处也设置了超时，此处超时需大于盒子与设备连接时的超时，当前盒子与设备连接超时时间为5s
-	bufferevent_set_timeouts(accept_sockfd_bev, &tv_read, NULL);
+    //注意，在盒子连接设备处也设置了超时，此处超时需大于盒子与设备连接时的超时，当前盒子与设备连接超时时间为5s
+    bufferevent_set_timeouts(accept_sockfd_bev, &tv_read, NULL);
     bufferevent_setcb(accept_sockfd_bev, deal_client_cmd, NULL, deal_client_cmd_error_cb1, NULL);
     bufferevent_enable(accept_sockfd_bev, EV_READ);
 

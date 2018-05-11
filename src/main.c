@@ -11,16 +11,14 @@
 #include "libevent_server.h"
 #include "dev_opt.h"
 #include "dev_list.h"
+#include "common.h"
 
-#ifdef HAND_SERVER_IP
-HB_CHAR cServerIp[16] = {0};
-#endif
-HB_CHAR	 glBoxSn[32] = {0}; //盒子序列号
-
+GLOBLE_PARAM glParam;
 
 int main(int argc, char **argv)
 {
 	int ret = 0;
+	HB_CHAR cBoxSn[32] = {0}; //盒子序列号
 
 //	signal(SIGPIPE, SIG_IGN);
 	sigset_t signal_mask;
@@ -33,7 +31,8 @@ int main(int argc, char **argv)
 		return HB_FAILURE;
 	}
 
-	get_sys_sn(glBoxSn, sizeof(glBoxSn));
+	get_sys_sn(cBoxSn, sizeof(cBoxSn));
+	glParam.iMacSnLen = strlen(cBoxSn)+1;
 
 #ifdef HAND_SERVER_IP
 	if (argc < 2)
@@ -41,7 +40,7 @@ int main(int argc, char **argv)
 		printf("usage : ./a.out [server_ip]\n");
 		return -1;
 	}
-	strncpy(cServerIp, argv[1], 16);
+	strncpy(glParam.cServerIp, argv[1], 16);
 #endif
 	av_register_all();
 	avformat_network_init();
@@ -53,7 +52,7 @@ int main(int argc, char **argv)
 	printf("|                        BoxRtsp Started                       |\n");
 	printf("|              CompileTime : %s %s              |\n", __DATE__, __TIME__);
 	printf("----------------------------------------------------------------\n");
-	libevent_server_main_listen();
+	 libevent_server_main_listen();
 
 	return 0;
 }

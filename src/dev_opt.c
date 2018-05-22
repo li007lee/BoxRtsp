@@ -308,8 +308,8 @@ HB_VOID test_dev_connection(DEV_LIST_HANDLE pDevNode)
 	printf("pDevNode->arrDevIp[%s], pDevNode->port[%d]\n", pDevNode->arrDevIp, pDevNode->iDevRtspPort);
 
 	bufferevent_set_timeouts(connect_dev_bev, &tv_read, NULL);
+	bufferevent_setcb(connect_dev_bev, read_dev_sdp_cb, NULL, active_connect_eventcb, (HB_VOID *)pDevNode);
 	bufferevent_socket_connect(connect_dev_bev, (struct sockaddr*) &connect_to_addr, sizeof(struct sockaddr_in));
-	bufferevent_setcb(connect_dev_bev, read_dev_sdp_cb, NULL, active_connect_eventcb, (HB_VOID *) pDevNode);
 	bufferevent_enable(connect_dev_bev, EV_READ | EV_WRITE);
 }
 /***********************测试设备连通性END***********************/

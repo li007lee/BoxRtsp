@@ -421,7 +421,8 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 
 #ifdef HAND_SERVER_IP
 	memset(accDevId, 0, sizeof(accDevId));
-	strcpy(accDevId, "DS-2CD1201D-I320170526AACH766877798");
+//	strcpy(accDevId, "DS-2CD1201D-I320170526AACH766877798");
+	strcpy(accDevId, "test");
 #endif
 
 	DEV_INFO_OBJ stCurDev;

@@ -278,6 +278,8 @@ static HB_VOID connect_to_rtsp_server(HB_CHAR *pServerIp, HB_S32 iServerPort, DE
 	HB_S32 iServeraddrLen;
 	struct bufferevent *pSendVideoToServerEvent;//主动连接服务器事件
 
+//	printf("lalalalaalalallalalalalalal\n");
+
 	pSendVideoToServerEvent = bufferevent_socket_new(pEventBase, -1, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS|BEV_OPT_THREADSAFE);
 	bzero(&stServeraddr, sizeof(stServeraddr));
 	stServeraddr.sin_family = AF_INET;
@@ -285,6 +287,8 @@ static HB_VOID connect_to_rtsp_server(HB_CHAR *pServerIp, HB_S32 iServerPort, DE
 	inet_pton(AF_INET, pServerIp, &stServeraddr.sin_addr);
 	iServeraddrLen = sizeof(struct sockaddr_in);
 
+	printf("pServerIp:[%s]:[%d]\n", pServerIp, iServerPort);
+	bufferevent_enable(pSendVideoToServerEvent, EV_READ);
 	bufferevent_setcb(pSendVideoToServerEvent, NULL, NULL, connect_to_rtsp_server_event_cb, (HB_VOID *)pDevNode);
 	bufferevent_socket_connect(pSendVideoToServerEvent, (struct sockaddr*)&stServeraddr, iServeraddrLen);
 }
@@ -415,14 +419,14 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 	analysis_json_dev_info(pCmdBuf, accDevIdTmp, &iDevChnl, &iDevStreamType);
 	url_decode(accDevIdTmp, strlen(accDevIdTmp), accDevIdDecode, MAX_DEV_ID_LEN);
 	strncpy(accDevId, accDevIdDecode+glParam.iMacSnLen, MAX_DEV_ID_LEN);
-//	strncpy(accDevId, accDevIdDecode, MAX_DEV_ID_LEN);
+//	strncpy(accDevId, accDevIdDecode+strlen("251227033954843-"), MAX_DEV_ID_LEN);
 
 	TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", accDevIdDecode, iDevChnl, iDevStreamType);
 
 #ifdef HAND_SERVER_IP
 	memset(accDevId, 0, sizeof(accDevId));
 //	strcpy(accDevId, "DS-2CD1201D-I320170526AACH766877798");
-	strcpy(accDevId, "test");
+	strcpy(accDevId, "12345");
 #endif
 
 	DEV_INFO_OBJ stCurDev;
@@ -598,8 +602,9 @@ static HB_S32 push_stream(HB_CHAR *pCmdBuf, struct bufferevent *pClientBev)
 	iDevStreamType = pStreamType->valueint;
 
 	url_decode(arrDevIdTmp, strlen(arrDevIdTmp), arrDevIdDecode, MAX_DEV_ID_LEN);
-	strncpy(arrDevId, arrDevIdDecode+glParam.iMacSnLen, MAX_DEV_ID_LEN);
-//	TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", arrDevIdDecode, iDevChnl, iDevStreamType);
+//	strncpy(arrDevId, arrDevIdDecode+glParam.iMacSnLen, MAX_DEV_ID_LEN);
+	strncpy(arrDevId, arrDevIdDecode, MAX_DEV_ID_LEN);
+	TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", arrDevIdDecode, iDevChnl, iDevStreamType);
 	DEV_INFO_OBJ stCurDev;
 	memset(&stCurDev, 0, sizeof(DEV_INFO_OBJ));
 
@@ -794,7 +799,6 @@ HB_VOID deal_client_cmd(struct bufferevent *pClientBev, void *arg)
 		strncpy(arrcCmdType, pCmdType->valuestring, sizeof(arrcCmdType)); //play或stop
 		printf("arrcCmdType:[%s]\n", arrcCmdType);
 	}
-
 	if (!strncmp(arrcCmdType, "open_video", 10))
 	{
 		TRACE_GREEN("Recv Cmd1 : [%s]\n", arrcRecvCmdBuf+sizeof(BOX_CTRL_CMD_OBJ));
@@ -954,7 +958,6 @@ HB_VOID deal_client_cmd(struct bufferevent *pClientBev, void *arg)
 static HB_VOID accept_client_connect_cb(struct evconnlistener *pListener, evutil_socket_t iAcceptSockfd,
 	    struct sockaddr *pClientAddr, int slen, void *arg)
 {
-	struct timeval tv_read;
 
 #if 1
 	//打印对端ip
@@ -968,7 +971,8 @@ static HB_VOID accept_client_connect_cb(struct evconnlistener *pListener, evutil
     struct bufferevent *accept_sockfd_bev = bufferevent_socket_new(pEventBase, iAcceptSockfd, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_THREADSAFE);
     //设置低水位，当数据长度大于消息头时才读取数据
     bufferevent_setwatermark(accept_sockfd_bev, EV_READ, sizeof(BOX_CTRL_CMD_OBJ)+1, 0);
-    //设置超时，5秒内未收到对端发来数据则断开连接
+    //设置超时，10秒内未收到对端发来数据则断开连接
+    struct timeval tv_read;
     tv_read.tv_sec  = 10;
     tv_read.tv_usec = 0;
     //注意，在盒子连接设备处也设置了超时，此处超时需大于盒子与设备连接时的超时，当前盒子与设备连接超时时间为5s

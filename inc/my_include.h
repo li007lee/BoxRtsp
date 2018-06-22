@@ -123,7 +123,6 @@ typedef enum _tagHB_BOOL
 //#define DEV_DATA_BASE_NAME "../data/TM_X01_Data.db"
 //#define HAND_SERVER_IP
 
-//#define DEV_DATA_BASE_NAME "../data/dev_manager.db"
 //#define AUTHENTICATE  ture
 
 #define DEBUG

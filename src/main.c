@@ -18,21 +18,22 @@ GLOBLE_PARAM glParam;
 int main(int argc, char **argv)
 {
 	int ret = 0;
-	HB_CHAR cBoxSn[32] = {0}; //盒子序列号
+	HB_CHAR cBoxSn[32] = { 0 }; //盒子序列号
 
 //	signal(SIGPIPE, SIG_IGN);
 	sigset_t signal_mask;
-	sigemptyset (&signal_mask);
-	sigaddset (&signal_mask, SIGPIPE);
-	ret = pthread_sigmask (SIG_BLOCK, &signal_mask, NULL);
+	sigemptyset(&signal_mask);
+	sigaddset(&signal_mask, SIGPIPE);
+	ret = pthread_sigmask(SIG_BLOCK, &signal_mask, NULL);
 	if (ret != 0)
 	{
 		TRACE_ERR("###### block sigpipe error!\n");
+
 		return HB_FAILURE;
 	}
 
 	get_sys_sn(cBoxSn, sizeof(cBoxSn));
-	glParam.iMacSnLen = strlen(cBoxSn)+1;
+	glParam.iMacSnLen = strlen(cBoxSn) + 1;
 
 #ifdef HAND_SERVER_IP
 	if (argc < 2)
@@ -42,7 +43,7 @@ int main(int argc, char **argv)
 	}
 	strncpy(glParam.cServerIp, argv[1], 16);
 #endif
-	av_register_all();
+//	av_register_all();
 	avformat_network_init();
 
 	list_init(&listDevList);
@@ -52,7 +53,7 @@ int main(int argc, char **argv)
 	printf("|                        BoxRtsp Started                       |\n");
 	printf("|              CompileTime : %s %s              |\n", __DATE__, __TIME__);
 	printf("----------------------------------------------------------------\n");
-	 libevent_server_main_listen();
+	libevent_server_main_listen();
 
 	return 0;
 }

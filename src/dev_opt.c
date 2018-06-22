@@ -5,6 +5,7 @@
  *      Author: lijian
  */
 
+#include "libavutil/error.h"
 #include "dev_opt.h"
 #include "dev_list.h"
 
@@ -319,6 +320,7 @@ HB_VOID test_dev_connection(DEV_LIST_HANDLE pDevNode)
 /***********************视频流传输***********************/
 /***********************视频流传输***********************/
 /***********************视频流传输***********************/
+#if 1
 static int interrupt_cb(void *ctx)
 {
 	// do something
@@ -332,15 +334,16 @@ static int interrupt_cb(void *ctx)
 
 		time(&time_now);
 //		printf("time_last=[%ld], time_now=[%ld]\n", *time_last, time_now);
-		if ((time_now - *time_last) > 5)
+		if ((time_now - *time_last) > 15)
 		{
-			printf("av_read_frame time out\n");
+			printf("av_read_frame time out cur_time:%ld, last_time:%ld\n", time_now, *time_last);
 			return AVERROR_EOF; //这个就是超时的返回
 		}
 	}
 
 	return 0;
 }
+#endif
 
 //从设备读取视频流线程
 HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
@@ -369,8 +372,12 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 	in_fmt_ctx_v->interrupt_callback.opaque = &time_now;
 
 	AVDictionary* options = NULL;
+//	av_dict_set(&options, "max_delay", "50000000", 0);
 	//设置rtsp传输模式为tcp
 	av_dict_set(&options, "rtsp_transport", "tcp", 0);
+	av_dict_set(&options, "stimeout", "10000000", 0);//打开流超时时间 单位us  10s
+//	av_dict_set(&options, "rw_timeout", "5000", 0);//读取流超时 单位ms
+
 	if (pDevNode->iDevStreamType == 0)
 	{
 		//主码流
@@ -395,17 +402,21 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 
 	printf("OpenRtspUrl[%s]\n", arrOpenRtspUrl);
 	iRet = avformat_open_input(&in_fmt_ctx_v, arrOpenRtspUrl, NULL, &options);
+#if 1
 	if (iRet != 0)
 	{
-		iRet = avformat_open_input(&in_fmt_ctx_v, arrOpenRtspUrl, NULL, NULL);
+		printf("\n0000000000000avformat_open_input failed ret=%d\n", iRet);
+		av_dict_set(&options, "rtsp_transport", "udp", 0);
+		iRet = avformat_open_input(&in_fmt_ctx_v, arrOpenRtspUrl, NULL, &options);
 		if (iRet != 0)
 		{
-			printf("\n0000000000000avformat_open_input failed ret=%d\n", iRet);
+			printf("\n111111111111111avformat_open_input failed ret=%d\n", iRet);
 			av_dict_free(&options);
 			goto End;
 		}
 
 	}
+#endif
 	av_dict_free(&options);
 
 	for (i = 0; i < in_fmt_ctx_v->nb_streams; i++)
@@ -444,6 +455,8 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 	memset(&send_cmd, 0, sizeof(BOX_CTRL_CMD_OBJ));
 	strncpy(send_cmd.header, "hBzHbox@", 8);
 
+	HB_S32 av_read_err_count = 0;
+
 	while (1)
 	{
 		if (list_size(plistRtspClient) < 1)
@@ -463,6 +476,7 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 			{
 				if (1 == p_pkt->flags) //I帧
 				{
+//					printf("IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII=%ld\n", time(&time_now));
 					time(&time_now);
 					if (iIFlag == 0)
 					{
@@ -616,9 +630,15 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 		}
 		else
 		{
-			TRACE_ERR("av_read_frame() failed!%d\n", iRet);
+
+			++av_read_err_count;
 			av_packet_free(&p_pkt);
-			break;
+			TRACE_ERR("av_read_frame() failed!%d, err_count=%d\n", iRet, av_read_err_count);
+			if (av_read_err_count > 10)
+			{
+//				TRACE_ERR("av_read_frame() failed !  Break\n", iRet);
+				break;
+			}
 		}
 	}
 

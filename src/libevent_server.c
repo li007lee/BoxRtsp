@@ -207,13 +207,34 @@ static HB_VOID send_rtsp_to_server_event_error_cb(struct bufferevent *connect_rt
  */
 static HB_VOID connect_to_rtsp_server_event_cb(struct bufferevent *pConnectRtspServerBev, HB_S16 what, HB_VOID *arg)
 {
-	DEV_LIST_HANDLE pDevNode = (DEV_LIST_HANDLE)arg;
+	LIBEVENT_ARGS_DEV_HANDLE pMessengerArgsDev = (LIBEVENT_ARGS_DEV_HANDLE)arg;
+	DEV_LIST_HANDLE pDevNode = pMessengerArgsDev->pDevNode;
 	list_t *plistRtspClient = (list_t *)&(pDevNode->listRtspClient);
-//	CLIENT_LIST_HEAD_HANDLE pRtspClientHead = &(pDevNode->stRtspClientHead);
+	CLIENT_LIST_HANDLE pClientNode = pMessengerArgsDev->pClientNode;
 
 	if (what & BEV_EVENT_CONNECTED)//盒子主动连接rtsp服务器成功
 	{
 		TRACE_GREEN("Connect to rtsp server succeed！！！！！！！！！！！\n");
+		pClientNode->pSendVideoToServerEvent = pConnectRtspServerBev;
+		pClientNode->iSendFrameFlag = 1;
+
+		pthread_rwlock_wrlock(&rwlockMyLock);
+		//启动读取视频流线程
+		if (pDevNode->iStartThreadFlag == 0)
+		{
+			//如果当前设备还没有启动推流线程，则启动
+			pthread_create(&(pDevNode->threadReadVideoId), NULL, read_video_data_from_dev_task, (HB_VOID*)pDevNode);
+		}
+
+		//设置超时，10秒内未收到对端发来数据则断开连接
+		struct timeval tv_w = {10, 0};
+		//设置数据发送的写超时
+		bufferevent_set_timeouts(pConnectRtspServerBev, NULL, &tv_w);
+		//设置连接出错后的回调函数
+		bufferevent_setcb(pConnectRtspServerBev, NULL, NULL, send_rtsp_to_server_event_error_cb, (HB_VOID *)pMessengerArgsDev);
+		bufferevent_enable(pConnectRtspServerBev, EV_WRITE);
+		pthread_rwlock_unlock(&rwlockMyLock);
+#if 0
 		//连接成功创建客户节点
 		CLIENT_LIST_HANDLE pClientNode = (CLIENT_LIST_HANDLE)malloc(sizeof(CLIENT_LIST_OBJ));
 		memset(pClientNode, 0, sizeof(CLIENT_LIST_OBJ));
@@ -241,25 +262,41 @@ static HB_VOID connect_to_rtsp_server_event_cb(struct bufferevent *pConnectRtspS
 		bufferevent_setcb(pConnectRtspServerBev, NULL, NULL, send_rtsp_to_server_event_error_cb, (HB_VOID *)pMessengerArgsDev);
 		bufferevent_enable(pConnectRtspServerBev, EV_WRITE);
 		pthread_rwlock_unlock(&rwlockMyLock);
-//		pthread_mutex_unlock(&(stDevListHead.mutexDevListMutex));
+#endif
 	}
 	else  //盒子connect rtsp服务器失败
 	{
 		TRACE_ERR("\n###########  connect rtsp server failed !\n");
 		bufferevent_disable(pConnectRtspServerBev, EV_READ|EV_WRITE);
-		TRACE_YELLOW("\n###########  total client total client total client total client== [%d]!\n", list_size(plistRtspClient));
+		pthread_rwlock_wrlock(&rwlockMyLock);
 		if (list_size(plistRtspClient) < 1)
 		{
 			//连接rtsp服务器失败，如果当前用户数为0，那么就将设备从链表中删除
-			pthread_rwlock_wrlock(&rwlockMyLock);
-//			del_one_from_dev_list(pDevNode);
-			list_delete(&listDevList, (HB_VOID *)pDevNode);
-			pDevNode = NULL;
-			pthread_rwlock_unlock(&rwlockMyLock);
-		}
 
+			list_delete(&listDevList, (HB_VOID *)pDevNode);
+			list_delete(plistRtspClient, (HB_VOID *)(pClientNode));
+			TRACE_YELLOW("\n###########  total client total client total client total client== [%d]!\n", list_size(plistRtspClient));
+
+			free(pClientNode);
+			pClientNode = NULL;
+			list_destroy(plistRtspClient);
+			plistRtspClient = NULL;
+
+			free(pDevNode);
+			pDevNode = NULL;
+		}
+		else
+		{
+			//还存在其它客户，只删除当前客户节点
+			list_delete(plistRtspClient, (HB_VOID *)(pClientNode));
+			free(pClientNode);
+			pClientNode = NULL;
+		}
+		pthread_rwlock_unlock(&rwlockMyLock);
 		bufferevent_free(pConnectRtspServerBev);
 		pConnectRtspServerBev = NULL;
+		free(pMessengerArgsDev);
+		pMessengerArgsDev = NULL;
 	}
 }
 
@@ -278,7 +315,17 @@ static HB_VOID connect_to_rtsp_server(HB_CHAR *pServerIp, HB_S32 iServerPort, DE
 	HB_S32 iServeraddrLen;
 	struct bufferevent *pSendVideoToServerEvent;//主动连接服务器事件
 
-//	printf("lalalalaalalallalalalalalal\n");
+	CLIENT_LIST_HANDLE pClientNode = (CLIENT_LIST_HANDLE)calloc(1, sizeof(CLIENT_LIST_OBJ));
+	pthread_rwlock_wrlock(&rwlockMyLock);
+	//插入链表
+	list_append(&(pDevNode->listRtspClient), (HB_VOID *)pClientNode);
+	pthread_rwlock_unlock(&rwlockMyLock);
+
+	LIBEVENT_ARGS_DEV_HANDLE pMessengerArgsDev = (LIBEVENT_ARGS_DEV_HANDLE)malloc(sizeof(LIBEVENT_ARGS_DEV_OBJ));
+	memset(pMessengerArgsDev, 0, sizeof(LIBEVENT_ARGS_DEV_OBJ));
+	pMessengerArgsDev->pDevNode = pDevNode;
+	pMessengerArgsDev->pClientNode = pClientNode;
+	TRACE_YELLOW("\n###########  total client total client total client total client== [%d]!\n", list_size(&(pDevNode->listRtspClient)));
 
 	pSendVideoToServerEvent = bufferevent_socket_new(pEventBase, -1, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS|BEV_OPT_THREADSAFE);
 	bzero(&stServeraddr, sizeof(stServeraddr));
@@ -287,9 +334,12 @@ static HB_VOID connect_to_rtsp_server(HB_CHAR *pServerIp, HB_S32 iServerPort, DE
 	inet_pton(AF_INET, pServerIp, &stServeraddr.sin_addr);
 	iServeraddrLen = sizeof(struct sockaddr_in);
 
+	//设置连接超时
+	struct timeval tv_r= {5, 0};
+	bufferevent_set_timeouts(pSendVideoToServerEvent, &tv_r, NULL);
 	printf("pServerIp:[%s]:[%d]\n", pServerIp, iServerPort);
+	bufferevent_setcb(pSendVideoToServerEvent, NULL, NULL, connect_to_rtsp_server_event_cb, (HB_VOID *)pMessengerArgsDev);
 	bufferevent_enable(pSendVideoToServerEvent, EV_READ);
-	bufferevent_setcb(pSendVideoToServerEvent, NULL, NULL, connect_to_rtsp_server_event_cb, (HB_VOID *)pDevNode);
 	bufferevent_socket_connect(pSendVideoToServerEvent, (struct sockaddr*)&stServeraddr, iServeraddrLen);
 }
 /***************************处理Server_info消息End****************************/
@@ -418,8 +468,11 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 
 	analysis_json_dev_info(pCmdBuf, accDevIdTmp, &iDevChnl, &iDevStreamType);
 	url_decode(accDevIdTmp, strlen(accDevIdTmp), accDevIdDecode, MAX_DEV_ID_LEN);
-	strncpy(accDevId, accDevIdDecode+glParam.iMacSnLen, MAX_DEV_ID_LEN);
-//	strncpy(accDevId, accDevIdDecode+strlen("251227033954843-"), MAX_DEV_ID_LEN);
+//	strncpy(accDevId, accDevIdDecode+glParam.iMacSnLen, MAX_DEV_ID_LEN);
+//	strncpy(accDevId, accDevIdDecode+strlen("251227033954859-"), MAX_DEV_ID_LEN);
+	strncpy(accDevId, accDevIdDecode+strlen("251227033935061-"), MAX_DEV_ID_LEN);
+//	memset(accDevId, 0, sizeof(accDevId));
+//	strcpy(accDevId, "DS-2CD1201D-I320170526AACH766877798");
 
 	TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", accDevIdDecode, iDevChnl, iDevStreamType);
 

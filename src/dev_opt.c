@@ -381,22 +381,48 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 	if (pDevNode->iDevStreamType == 0)
 	{
 		//主码流
-		snprintf(arrOpenRtspUrl, sizeof(arrOpenRtspUrl), "rtsp://%s:%s@%s", pDevNode->arrUserName, pDevNode->arrUserPasswd,
-						pDevNode->arrDevRtspMainUrl + strlen("rtsp://"));
-	}
-	else
-	{
-		//子码流
-		if ((pDevNode->arrDevRtspSubUrl == NULL) || (strlen(pDevNode->arrDevRtspSubUrl) == 0))
+		if ((pDevNode->arrUserName == NULL) || (strlen(pDevNode->arrUserName) == 0))
 		{
-			//如果没有子码流，依然使用主码流打开
-			snprintf(arrOpenRtspUrl, sizeof(arrOpenRtspUrl), "rtsp://%s:%s@%s", pDevNode->arrUserName, pDevNode->arrUserPasswd,
-							pDevNode->arrDevRtspMainUrl + strlen("rtsp://"));
+			//没有用户名密码
+			snprintf(arrOpenRtspUrl, sizeof(arrOpenRtspUrl), "rtsp://%s", pDevNode->arrDevRtspMainUrl + strlen("rtsp://"));
 		}
 		else
 		{
 			snprintf(arrOpenRtspUrl, sizeof(arrOpenRtspUrl), "rtsp://%s:%s@%s", pDevNode->arrUserName, pDevNode->arrUserPasswd,
-							pDevNode->arrDevRtspSubUrl + strlen("rtsp://"));
+							pDevNode->arrDevRtspMainUrl + strlen("rtsp://"));
+		}
+
+	}
+	else
+	{
+
+		//子码流
+		if ((pDevNode->arrUserName == NULL) || (strlen(pDevNode->arrUserName) == 0))
+		{
+			//没有用户名密码
+			if ((pDevNode->arrDevRtspSubUrl == NULL) || (strlen(pDevNode->arrDevRtspSubUrl) == 0))
+			{
+				//如果没有子码流，依然使用主码流打开
+				snprintf(arrOpenRtspUrl, sizeof(arrOpenRtspUrl), "rtsp://%s", pDevNode->arrDevRtspMainUrl + strlen("rtsp://"));
+			}
+			else
+			{
+				snprintf(arrOpenRtspUrl, sizeof(arrOpenRtspUrl), "rtsp://%s", pDevNode->arrDevRtspSubUrl + strlen("rtsp://"));
+			}
+		}
+		else
+		{
+			if ((pDevNode->arrDevRtspSubUrl == NULL) || (strlen(pDevNode->arrDevRtspSubUrl) == 0))
+			{
+				//如果没有子码流，依然使用主码流打开
+				snprintf(arrOpenRtspUrl, sizeof(arrOpenRtspUrl), "rtsp://%s:%s@%s", pDevNode->arrUserName, pDevNode->arrUserPasswd,
+								pDevNode->arrDevRtspMainUrl + strlen("rtsp://"));
+			}
+			else
+			{
+				snprintf(arrOpenRtspUrl, sizeof(arrOpenRtspUrl), "rtsp://%s:%s@%s", pDevNode->arrUserName, pDevNode->arrUserPasswd,
+								pDevNode->arrDevRtspSubUrl + strlen("rtsp://"));
+			}
 		}
 	}
 
@@ -448,8 +474,6 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 					pDevNode->iDevStreamType);
 
 	HB_S64 iIFlag = 0; //由于前几帧的pts经常出错，此变量用于忽略第两个个I帧，从第三I帧开始发送数据
-	HB_S32 iCount = 0;
-	HB_S64 llPtsOld = 0;
 	HB_S32 iWriteBufLen = 0;
 	BOX_CTRL_CMD_OBJ send_cmd;
 	memset(&send_cmd, 0, sizeof(BOX_CTRL_CMD_OBJ));
@@ -481,34 +505,13 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 					time(&time_now);
 					if (iIFlag == 0)
 					{
-						//I帧第一次出现,一般都是异常数据，直接丢弃
-						iIFlag++;
-						av_packet_free(&p_pkt);
-						continue;
-					}
-					else if (iIFlag == 1)
-					{
-						//I帧第二次出现,开始累积pts数据用于计算帧间隔
-						iIFlag++;
-						av_packet_free(&p_pkt);
-						continue;
-					}
-					else if (iIFlag == 2)
-					{
-						iIFlag++;
-						//I帧第二次出现,开始累积pts数据用于计算帧间隔
-						//因为是从第三个I帧发送数据，所以开始发送数据帧前计算出pts间隔
-//						printf("llPtsOld=%lld\n", llPtsOld);
-						if (iCount > 0)
+						printf("\nVIDEO VIDEOframe type=%d duration=%lld pts=%lld data_len=%d\n", p_pkt->flags, p_pkt->duration, p_pkt->pts, p_pkt->size);
+						if(p_pkt->pts > 0)
 						{
-							pDevNode->iPtsRateInterval = (HB_S32) ((p_pkt->pts - llPtsOld) / iCount);
-							TRACE_YELLOW("thread_id[%lu]-->dev_id[%s]-->dev_Chnl[%d]-->dev_stream_type[%d]-->iPtsRateInterval[%d]\n", thread_id,
-											pDevNode->pDevId, pDevNode->iDevChnl, pDevNode->iDevStreamType, pDevNode->iPtsRateInterval);
+							iIFlag = 1;
 						}
 						else
 						{
-							TRACE_ERR("thread_id[%lu] Calc iPtsRateInterval failed! Retry!\n", thread_id);
-							iIFlag = 2;
 							av_packet_free(&p_pkt);
 							continue;
 						}
@@ -516,17 +519,8 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 				}
 				else //BP帧
 				{
-					if (iIFlag < 3) //第三个I帧前的数据全部丢弃
+					if (!iIFlag) //第一个I帧前的数据全部丢弃
 					{
-						if (iIFlag == 2)
-						{
-							if (iCount == 0)
-							{
-								llPtsOld = p_pkt->pts;
-								//							printf("p_pkt->pts=%lld\n", p_pkt->pts);
-							}
-							iCount++;
-						}
 						av_packet_free(&p_pkt);
 						continue;
 					}
@@ -611,9 +605,6 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 						}
 					}
 
-					//获取写缓冲的缓冲区大小
-//						int len = bufferevent_get_max_to_write(pClientNode->pSendVideoToServerEvent);
-//						printf("%p############size:%d\n", pClientNode->pSendVideoToServerEvent, len);
 					pClientNode->iMissFrameFlag = 0;
 					pClientNode->pts += pDevNode->iPtsRateInterval;
 					send_cmd.pts = pClientNode->pts;

@@ -215,6 +215,7 @@ static HB_VOID connect_to_rtsp_server_event_cb(struct bufferevent *pConnectRtspS
 	if (what & BEV_EVENT_CONNECTED)//盒子主动连接rtsp服务器成功
 	{
 		TRACE_GREEN("Connect to rtsp server succeed！！！！！！！！！！！\n");
+//		bufferevent_set_timeouts(pConnectRtspServerBev, NULL, NULL);
 		pClientNode->pSendVideoToServerEvent = pConnectRtspServerBev;
 		pClientNode->iSendFrameFlag = 1;
 
@@ -335,8 +336,8 @@ static HB_VOID connect_to_rtsp_server(HB_CHAR *pServerIp, HB_S32 iServerPort, DE
 	iServeraddrLen = sizeof(struct sockaddr_in);
 
 	//设置连接超时
-	struct timeval tv_r= {5, 0};
-	bufferevent_set_timeouts(pSendVideoToServerEvent, &tv_r, NULL);
+	struct timeval tv_w= {5, 0};
+	bufferevent_set_timeouts(pSendVideoToServerEvent, NULL, &tv_w);
 	printf("pServerIp:[%s]:[%d]\n", pServerIp, iServerPort);
 	bufferevent_setcb(pSendVideoToServerEvent, NULL, NULL, connect_to_rtsp_server_event_cb, (HB_VOID *)pMessengerArgsDev);
 	bufferevent_enable(pSendVideoToServerEvent, EV_READ);
@@ -469,8 +470,8 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 	analysis_json_dev_info(pCmdBuf, accDevIdTmp, &iDevChnl, &iDevStreamType);
 	url_decode(accDevIdTmp, strlen(accDevIdTmp), accDevIdDecode, MAX_DEV_ID_LEN);
 //	strncpy(accDevId, accDevIdDecode+glParam.iMacSnLen, MAX_DEV_ID_LEN);
-//	strncpy(accDevId, accDevIdDecode+strlen("251227033954859-"), MAX_DEV_ID_LEN);
-	strncpy(accDevId, accDevIdDecode+strlen("251227033935061-"), MAX_DEV_ID_LEN);
+	strncpy(accDevId, accDevIdDecode, MAX_DEV_ID_LEN);
+//	strncpy(accDevId, accDevIdDecode+strlen("251227033935061-"), MAX_DEV_ID_LEN);
 //	memset(accDevId, 0, sizeof(accDevId));
 //	strcpy(accDevId, "DS-2CD1201D-I320170526AACH766877798");
 
@@ -521,7 +522,7 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 			free(pDevNode);
 			pDevNode = NULL;
 			pthread_rwlock_unlock(&rwlockMyLock);
-			TRACE_ERR("The device [%s] do not in the database!\n", accDevId);
+			TRACE_ERR("The device [%s]chnl[%d]stream_type[%d] do not in the database!\n", accDevId, iDevChnl, iDevStreamType);
 			return HB_FAILURE;
 		}
 

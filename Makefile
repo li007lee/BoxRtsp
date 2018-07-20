@@ -1,7 +1,7 @@
 #BOX_TYPE?=pc_x86
-#BOX_TYPE?=pc_x86_64
+BOX_TYPE?=pc_x86_64
 #BOX_TYPE?=hisi_v100
-BOX_TYPE?=hisi_v300
+#BOX_TYPE?=hisi_v300
 
 ifeq ($(BOX_TYPE), pc_x86)
 CC=gcc
@@ -38,7 +38,7 @@ LIBS :=  -L./lib/hisiv100 \
 			-levent -levent_pthreads -lsqlite3 -lavformat \
 			-lavcodec -lavfilter -lswscale -lavutil -lswresample -lm -ldl -lpthread -lrt
 
-APPBIN = box_rtsp_h100
+APPBIN = box_rtsp_v100
 DEST_BIN = /mnt/hgfs/nfs_dir/share_dir/hb/BoxRtsp/bin
 endif
 
@@ -51,7 +51,7 @@ LIBS := -L./lib/hisiv300 -L./lib/hisiv300/ffmpeg4.0.1 \
 			-levent -levent_pthreads -lsqlite3 -lavformat \
 			-lavcodec -lavfilter -lswscale -lavutil -lswresample -lm -ldl -lpthread -lrt
 
-APPBIN = box_rtsp_h300
+APPBIN = box_rtsp_v300
 DEST_BIN = /mnt/hgfs/nfs_dir/share_dir/hb/BoxRtsp/bin
 endif
 

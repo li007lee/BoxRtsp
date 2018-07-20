@@ -10,54 +10,36 @@
 #define _MY_INCLUDE_H
 
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 #include <pthread.h>
-#include<stdio.h>
 #include <assert.h>
-#include<stdlib.h>
 #include <ctype.h>
-#include<sys/types.h>
-#include<sys/socket.h>
-#include<unistd.h>
-#include<fcntl.h>
-#include<netinet/in.h>
-#include<signal.h>
-#include<arpa/inet.h>
-#include<sys/select.h>
-#include<errno.h>
-#include<strings.h>
-#include<string.h>
-#include<signal.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <errno.h>
 #include <time.h>
+#include <resolv.h>
+#include <syslog.h>
+#include <ifaddrs.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/stat.h>
-#include <net/if.h>
-#include <resolv.h>
-#include <net/if_arp.h>
-#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/ioctl.h>
-#include <sys/socket.h>
-#include <net/if.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <string.h>
-#include <netinet/in.h>
-#include <ifaddrs.h>
-#include <net/ethernet.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <netpacket/packet.h>
-#include <net/ethernet.h>
-#include <netdb.h>
-#include <errno.h>
-#include <netinet/ip.h>
-#include <strings.h>
-#include <arpa/inet.h>
 #include <sys/wait.h>
-#include <stdlib.h>
-#include <errno.h>
 #include <sys/mman.h>
-#include <syslog.h>
+#include <sys/select.h>
+#include <net/ethernet.h>
+#include <net/if_arp.h>
+#include <net/if.h>
+#include <netinet/ip.h>
+#include <netinet/in.h>
+#include <netpacket/packet.h>
 
 
 #define X86_32bit
@@ -68,36 +50,36 @@
 ///////////////////////////////////////////////////////////////////////////////////////////
 //数据类型定义
 ///////////////////////////////////////////////////////////////////////////////////////////
-typedef unsigned char              HB_U8;
-typedef unsigned short            HB_U16;
-typedef unsigned int                 HB_U32;
-typedef unsigned long long    HB_U64;
-typedef signed char                   HB_S8;
-typedef short                                HB_S16;
-typedef int                                     HB_S32;
-typedef long long                        HB_S64;
-typedef char                                 HB_CHAR;
-typedef float                                 HB_FLOAT;
-typedef void                                  HB_VOID;
-typedef void *                               HB_HANDLE;
+typedef unsigned char 		HB_U8;
+typedef unsigned short		HB_U16;
+typedef unsigned int		HB_U32;
+typedef unsigned long long	HB_U64;
+typedef signed char		HB_S8;
+typedef short			HB_S16;
+typedef int				HB_S32;
+typedef long long		HB_S64;
+typedef char		HB_CHAR;
+typedef float		HB_FLOAT;
+typedef void		HB_VOID;
+typedef void *		HB_HANDLE;
 #endif
 
 #ifdef X86_64bit
 ///////////////////////////////////////////////////////////////////////////////////////////
 //数据类型定义
 ///////////////////////////////////////////////////////////////////////////////////////////
-typedef char                                    HB_CHAR;
-typedef unsigned char                  HB_U8;
-typedef short                                   HB_S16;
-typedef unsigned short                 HB_U16;
-typedef int                                        HB_S32;
-typedef unsigned int                      HB_U32;
-typedef unsigned long                  HB_U64;
-typedef signed char                       HB_S8;
-typedef long                                    HB_S64;
-typedef float                                   HB_FLOAT;
-typedef void                                    HB_VOID;
-typedef void *                                 HB_HANDLE;
+typedef char		HB_CHAR;
+typedef unsigned char	HB_U8;
+typedef short		HB_S16;
+typedef unsigned short	HB_U16;
+typedef int			HB_S32;
+typedef unsigned int	HB_U32;
+typedef unsigned long	HB_U64;
+typedef signed char		HB_S8;
+typedef long		HB_S64;
+typedef float		HB_FLOAT;
+typedef void		HB_VOID;
+typedef void *		HB_HANDLE;
 #endif
 
 typedef enum _tagHB_BOOL
@@ -119,8 +101,8 @@ typedef enum _tagHB_BOOL
 //#define LIBEVENT_WRITE_BUF_SIZE		(1048576) //1M
 
 #define ETH_X	"eth0"
-#define DEV_DATA_BASE_NAME "/home/default/TM_X01_Data.db"
-//#define DEV_DATA_BASE_NAME "../data/TM_X01_Data.db"
+//#define DEV_DATA_BASE_NAME "/home/default/TM_X01_Data.db"
+#define DEV_DATA_BASE_NAME "../data/TM_X01_Data.db"
 //#define HAND_SERVER_IP
 
 //#define AUTHENTICATE  ture

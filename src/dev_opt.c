@@ -320,7 +320,7 @@ HB_VOID test_dev_connection(DEV_LIST_HANDLE pDevNode)
 /***********************视频流传输***********************/
 /***********************视频流传输***********************/
 /***********************视频流传输***********************/
-#if 1
+#if 0
 static int interrupt_cb(void *ctx)
 {
 	// do something
@@ -359,7 +359,7 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 	TRACE_YELLOW("thread_id[%lu]--->dev_id[%s]--->dev_Chnl[%d]--->dev_stream_type[%d]\n", thread_id, pDevNode->pDevId, pDevNode->iDevChnl,
 					pDevNode->iDevStreamType);
 
-	time_t time_now = time(NULL);
+//	time_t time_now = time(NULL);
 
 	int i;
 	HB_S32 iRet = 0;
@@ -368,15 +368,15 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 
 	//Input AVFormatContext and Output AVFormatContext
 	AVFormatContext *in_fmt_ctx_v = avformat_alloc_context();
-	in_fmt_ctx_v->interrupt_callback.callback = interrupt_cb; //--------注册回调函数,用于控制av_read_frame的超时
-	in_fmt_ctx_v->interrupt_callback.opaque = &time_now;
+//	in_fmt_ctx_v->interrupt_callback.callback = interrupt_cb; //--------注册回调函数,用于控制av_read_frame的超时
+//	in_fmt_ctx_v->interrupt_callback.opaque = &time_now;
 
 	AVDictionary* options = NULL;
 //	av_dict_set(&options, "max_delay", "50000000", 0);
 	//设置rtsp传输模式为tcp
 	av_dict_set(&options, "rtsp_transport", "tcp", 0);
-	av_dict_set(&options, "stimeout", "10000000", 0);//打开流超时时间 单位us  10s
-//	av_dict_set(&options, "rw_timeout", "5000", 0);//读取流超时 单位ms
+	av_dict_set(&options, "stimeout", "5000000", 0);//打开流超时时间 单位us  10s
+//	av_dict_set(&options, "rw_timeout", "2000", 0);//读取流超时 单位ms
 
 	if (pDevNode->iDevStreamType == 0)
 	{
@@ -473,13 +473,13 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 	TRACE_GREEN("\n####  open rtsp successful dev_id[%s]-->dev_Chnl[%d]-->dev_stream_type[%d]\n", pDevNode->pDevId, pDevNode->iDevChnl,
 					pDevNode->iDevStreamType);
 
-	HB_S64 iIFlag = 0; //由于前几帧的pts经常出错，此变量用于忽略第两个个I帧，从第三I帧开始发送数据
+	HB_S64 iIFlag = 0; //出现I帧的标志位
 	HB_S32 iWriteBufLen = 0;
 	BOX_CTRL_CMD_OBJ send_cmd;
 	memset(&send_cmd, 0, sizeof(BOX_CTRL_CMD_OBJ));
 	strncpy(send_cmd.header, "hBzHbox@", 8);
 
-	HB_S32 av_read_err_count = 0;
+//	HB_S32 av_read_err_count = 0;
 
 	while (1)
 	{
@@ -502,7 +502,7 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 				if (1 == p_pkt->flags) //I帧
 				{
 //					printf("IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII=%ld\n", time(&time_now));
-					time(&time_now);
+//					time(&time_now);
 					if (iIFlag == 0)
 					{
 						printf("\nVIDEO VIDEOframe type=%d duration=%lld pts=%lld data_len=%d\n", p_pkt->flags, p_pkt->duration, p_pkt->pts, p_pkt->size);
@@ -622,15 +622,18 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 		}
 		else
 		{
-
-			++av_read_err_count;
 			av_packet_free(&p_pkt);
-			TRACE_ERR("av_read_frame() failed!%d, err_count=%d\n", iRet, av_read_err_count);
-			if (av_read_err_count > 10)
-			{
-//				TRACE_ERR("av_read_frame() failed !  Break\n", iRet);
-				break;
-			}
+			TRACE_ERR("av_read_frame() failed!%d\n", iRet);
+			break;
+
+//			++av_read_err_count;
+//			av_packet_free(&p_pkt);
+//			TRACE_ERR("av_read_frame() failed!%d, err_count=%d\n", iRet, av_read_err_count);
+//			if (av_read_err_count > 10)
+//			{
+////				TRACE_ERR("av_read_frame() failed !  Break\n", iRet);
+//				break;
+//			}
 		}
 	}
 

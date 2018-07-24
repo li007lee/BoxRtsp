@@ -471,7 +471,6 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 	url_decode(accDevIdTmp, strlen(accDevIdTmp), accDevIdDecode, MAX_DEV_ID_LEN);
 //	strncpy(accDevId, accDevIdDecode+glParam.iMacSnLen, MAX_DEV_ID_LEN);
 	strncpy(accDevId, accDevIdDecode, MAX_DEV_ID_LEN);
-//	strncpy(accDevId, accDevIdDecode+strlen("251227033935061-"), MAX_DEV_ID_LEN);
 //	memset(accDevId, 0, sizeof(accDevId));
 //	strcpy(accDevId, "DS-2CD1201D-I320170526AACH766877798");
 

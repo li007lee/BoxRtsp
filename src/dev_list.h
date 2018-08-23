@@ -62,7 +62,7 @@ typedef struct _tagDEV_LIST
 
 	/*************视频sdp信息*************/
 	HB_S32 iVideoFrameRate; //视频帧率
-	HB_S32 iPtsRateInterval; //pts帧间隔
+//	HB_S32 iPtsRateInterval; //pts帧间隔
 
 	HB_CHAR m_video[64];
 	HB_CHAR a_rtpmap_video[128];

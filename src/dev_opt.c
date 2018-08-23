@@ -480,6 +480,7 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 	strncpy(send_cmd.header, "hBzHbox@", 8);
 
 //	HB_S32 av_read_err_count = 0;
+//	HB_S64 old_pts = 0;
 
 	while (1)
 	{
@@ -495,10 +496,11 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 		{
 //			printf("\n thread:[%lu] VIDEO VIDEO VIDEO VIDEO  frame type=%d duration=%lld pts=%lld\n", thread_id, p_pkt->flags, p_pkt->duration, p_pkt->pts);
 //			printf("\nVIDEO VIDEOframe type=%d duration=%lld pts=%llu\n", p_pkt->flags, p_pkt->duration, p_pkt->pts);
-
 			if (videoindex_v == p_pkt->stream_index) //视频帧
 			{
-//				printf("\nVIDEO VIDEOframe type=%d duration=%lld pts=%lld data_len=%d\n", p_pkt->flags, p_pkt->duration, p_pkt->pts, p_pkt->size);
+
+//				printf("\nVIDEO VIDEOframe type=%d duration=%lld pts=%lld interval=%lld data_len=%d\n", p_pkt->flags, p_pkt->duration, p_pkt->pts, p_pkt->pts - old_pts, p_pkt->size);
+//				old_pts = p_pkt->pts;
 				if (1 == p_pkt->flags) //I帧
 				{
 //					printf("IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII=%ld\n", time(&time_now));
@@ -606,8 +608,9 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 					}
 
 					pClientNode->iMissFrameFlag = 0;
-					pClientNode->pts += pDevNode->iPtsRateInterval;
-					send_cmd.pts = pClientNode->pts;
+//					pClientNode->pts += pDevNode->iPtsRateInterval;
+//					send_cmd.pts = pClientNode->pts;
+					send_cmd.pts = p_pkt->pts;
 //						send_cmd.uiVideoSec = (((HB_U32)(pClientNode->pts))/90)/1000;
 //						send_cmd.uiVideoUsec = (HB_U32)(((pClientNode->pts/90)%1000)*1000);
 					bufferevent_write(pClientNode->pSendVideoToServerEvent, &send_cmd, sizeof(BOX_CTRL_CMD_OBJ));

@@ -77,6 +77,9 @@ typedef struct _tagDEV_LIST
 	DEV_CONNECT_STATUS enumDevConnectStatus; //设备连接状态
 	list_t listRtspClient; //用户链表， CLIENT_LIST_OBJ类型结构体
 	list_t listWaitClient; //等待连接的用户链表， WAIT_CLIENT_LIST_OBJ类型结构体
+
+    HB_CHAR realm[64];
+    HB_CHAR nonce[128];
 }DEV_LIST_OBJ, *DEV_LIST_HANDLE;
 
 list_t listDevList;

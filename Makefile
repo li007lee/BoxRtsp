@@ -1,7 +1,7 @@
 #BOX_TYPE?=pc_x86
 #BOX_TYPE?=pc_x86_64
-BOX_TYPE?=hisi_v100
-#BOX_TYPE?=hisi_v300
+#BOX_TYPE?=hisi_v100
+BOX_TYPE?=hisi_v300
 
 ifeq ($(BOX_TYPE), pc_x86)
 CC=gcc
@@ -52,7 +52,7 @@ LIBS := -L./lib/hisiv300 -L./lib/hisiv300/ffmpeg4.0.1 \
 			-lavcodec -lavfilter -lswscale -lavutil -lswresample -lm -ldl -lpthread -lrt
 
 APPBIN = box_rtsp_v300
-DEST_BIN = /mnt/hgfs/nfs_dir/share_dir/hb/BoxRtsp/bin
+DEST_BIN = /mnt/hgfs/ShareDir/share/work/BoxRtsp/bin
 endif
 
 
@@ -66,4 +66,4 @@ all:
 	cp $(APPBIN) $(DEST_BIN)/$(APPBIN)
 	mv $(APPBIN) ./bin/
 clean:
-	rm -rf $(OBJS) ./bin/$(APPBIN) $(DEST_BIN)/$(APPBIN)
+	rm -rf $(OBJS) ./bin/$(APPBIN) 

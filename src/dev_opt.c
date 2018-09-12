@@ -8,6 +8,18 @@
 #include "libavutil/error.h"
 #include "dev_opt.h"
 #include "dev_list.h"
+#include "rtsp-parser.h"
+
+
+#define SEND_OPTIONS_MSG 		"OPTIONS %s RTSP/1.0\r\n"\
+									"CSeq: %u\r\n"\
+									"User-Agent: LibVLC/2.2.6 (LIVE555 Streaming Media v2016.02.22)\r\n\r\n"
+
+#define SEND_DESCRIBE_DIGEST_MSG 		"DESCRIBE %s RTSP/1.0\r\n"\
+												"CSeq: 4\r\n"\
+												"Authorization: Digest username=\"%s\", realm=\"%s\", nonce=\"%s\", uri=\"%s\", response=\"%s\"\r\n"\
+												"User-Agent: LibVLC/2.2.6 (LIVE555 Streaming Media v2016.02.22)\r\n"\
+												"Accept: application/sdp\r\n\r\n"
 
 //根据网卡eth获取相应到mac地址
 static HB_S32 get_mac_dev(HB_CHAR *mac_sn, HB_CHAR *dev)
@@ -164,15 +176,146 @@ static HB_VOID deal_client_cmd_error_cb2(struct bufferevent *bev, short events, 
 	bev = NULL;
 }
 
+
+static int get_realm_and_nonce(HB_CHAR *msg_str, DEV_LIST_HANDLE pDevNode)
+{
+	HB_CHAR *start_pos = NULL;
+	HB_CHAR *end_pos = NULL;
+	start_pos = strstr(msg_str, "realm");
+	if(start_pos != NULL)
+	{
+		start_pos = strchr(start_pos,'"');
+		end_pos = strchr(start_pos+2, '"');
+		memcpy(pDevNode->realm, start_pos+1, end_pos-start_pos-1);
+
+		start_pos = strstr(msg_str, "nonce");
+		if(start_pos != NULL)
+		{
+			start_pos = strchr(start_pos,'"');
+			end_pos = strchr(start_pos+2, '"');
+			memcpy(pDevNode->nonce, start_pos+1, end_pos-start_pos-1);
+		}
+	}
+	else
+	{
+		return -1;
+	}
+	return 0;
+}
+
+
+static int get_response(HB_CHAR *response, HB_CHAR *method, DEV_LIST_HANDLE pDevNode)
+{
+	HB_CHAR msg_buf[512] = {0};
+	HB_CHAR part1[64] = {0};
+	HB_CHAR part3[64] = {0};
+	snprintf(msg_buf, sizeof(msg_buf), "%s:%s:%s", pDevNode->arrUserName, pDevNode->realm, pDevNode->arrUserPasswd);
+	md5_packages_string(part1, msg_buf, strlen(msg_buf));
+	memset(msg_buf, 0, sizeof(msg_buf));
+	if (pDevNode->iDevStreamType == 0)
+	{
+		//主码流
+		snprintf(msg_buf, sizeof(msg_buf), "%s:%s", method, pDevNode->arrDevRtspMainUrl);
+	}
+	else
+	{
+		//子码流
+		if ((pDevNode->arrDevRtspSubUrl == NULL) || (strlen(pDevNode->arrDevRtspSubUrl) == 0))
+		{
+			//没有子码流依然使用主码流
+			snprintf(msg_buf, sizeof(msg_buf), "%s:%s", method, pDevNode->arrDevRtspMainUrl);
+		}
+		else
+		{
+			//有子码流
+			snprintf(msg_buf, sizeof(msg_buf), "%s:%s", method, pDevNode->arrDevRtspSubUrl);
+		}
+	}
+
+	md5_packages_string(part3, msg_buf, strlen(msg_buf));
+	memset(msg_buf, 0, sizeof(msg_buf));
+	snprintf(msg_buf, sizeof(msg_buf), "%s:%s:%s", part1, pDevNode->nonce, part3);
+	md5_packages_string(response, msg_buf, strlen(msg_buf));
+	return 0;
+}
+
+static HB_VOID active_connect_eventcb(struct bufferevent *connect_dev_bev, HB_S16 what, HB_VOID *arg)
+{
+	DEV_LIST_HANDLE pDevNode = (DEV_LIST_HANDLE) arg;
+	list_t *plistWaitClient = (list_t *) &(pDevNode->listWaitClient);
+
+	if (what & BEV_EVENT_CONNECTED)    //盒子主动connect设备成功
+	{
+#if 1
+		//连接设备成功发送describe获取sdp信息
+		HB_CHAR cDiscribe[1024] = { 0 };
+
+		if (pDevNode->iDevStreamType == 0)
+		{
+			//主码流
+			snprintf(cDiscribe, sizeof(cDiscribe),
+							"DESCRIBE %s RTSP/1.0\r\nCSeq: 3\r\nAccept: application/sdp\r\nAuthorization: Basic %s\r\n\r\n",
+							pDevNode->arrDevRtspMainUrl, pDevNode->arrBasicAuthenticate);
+			printf("DESCRIBE main 1: [%s]\n", cDiscribe);
+		}
+		else
+		{
+			//子码流
+			if ((pDevNode->arrDevRtspSubUrl == NULL) || (strlen(pDevNode->arrDevRtspSubUrl) == 0))
+			{
+				//没有子码流依然使用主码流
+				snprintf(cDiscribe, sizeof(cDiscribe),
+								"DESCRIBE %s RTSP/1.0\r\nCSeq: 3\r\nAccept: application/sdp\r\nAuthorization: Basic %s\r\n\r\n",
+								pDevNode->arrDevRtspMainUrl, pDevNode->arrBasicAuthenticate);
+				printf("DESCRIBE main 2: [%s]\n", cDiscribe);
+			}
+			else
+			{
+				//有子码流
+				snprintf(cDiscribe, sizeof(cDiscribe),
+								"DESCRIBE %s RTSP/1.0\r\nCSeq: 3\r\nAccept: application/sdp\r\nAuthorization: Basic %s\r\n\r\n",
+								pDevNode->arrDevRtspSubUrl, pDevNode->arrBasicAuthenticate);
+				printf("DESCRIBE sub 1: [%s]\n", cDiscribe);
+			}
+		}
+
+		TRACE_GREEN("\n############  connect dev successful and start to get dev SDP !\n");
+		bufferevent_write(connect_dev_bev, cDiscribe, strlen(cDiscribe));
+#endif
+	}
+	else
+	{
+		//盒子connect 设备失败,当数据库中有此设备，但此设备ip连接不上时会进到此接口
+		TRACE_ERR("\n###########  box connect dev  failed !\n");
+		pDevNode->enumDevConnectStatus = DISCONNECT;    //设置设备连接失败状态
+
+		if (pDevNode != NULL)
+		{
+			printf("del one dev from dev_list!\n");
+			pthread_rwlock_wrlock(&rwlockMyLock);
+			list_destroy(plistWaitClient);
+			list_delete(&listDevList, (HB_VOID *) pDevNode);
+			pDevNode = NULL;
+			pthread_rwlock_unlock(&rwlockMyLock);
+		}
+//		此连接事件由deal_client_cmd_error_cb1超时时进行释放
+		printf("active_connect_eventcb free bev!\n");
+		bufferevent_free(connect_dev_bev);
+		connect_dev_bev = NULL;
+	}
+}
+
+
+
 /*
- *	Function: 从设备获取sdp信息并解析
+ *	Function: 摘要认证回调函数
  *
  *	@param bev: 与设备的链接句柄
  *  @parmm args	: 实际为LIBEVENT_ARGS_HANDLE类型的参数结构体
  *
  *	Retrun: 无
  */
-static void read_dev_sdp_cb(struct bufferevent *connect_dev_bev, void *arg)
+static void read_dev_sdp_digest_cb(struct bufferevent *connect_dev_bev, void *arg)
 {
 	HB_S32 i;
 	DEV_LIST_HANDLE pDevNode = (DEV_LIST_HANDLE) arg;
@@ -187,7 +330,7 @@ static void read_dev_sdp_cb(struct bufferevent *connect_dev_bev, void *arg)
 
 	analysis_sdp_info(arr_RecvBuf, pDevNode);
 
-//	printf("=============sdp[%d]: [%s]\n", ret, arr_RecvBuf);
+	printf("=============sdp:[%s]\n", arr_RecvBuf);
 	memset(&st_MsgHead, 0, sizeof(st_MsgHead));
 	memcpy(st_MsgHead.header, "hBzHbox@", 8);
 	st_MsgHead.cmd_code = CMD_OK;
@@ -217,69 +360,139 @@ static void read_dev_sdp_cb(struct bufferevent *connect_dev_bev, void *arg)
 	pthread_rwlock_unlock(&rwlockMyLock);
 }
 
-static HB_VOID active_connect_eventcb(struct bufferevent *connect_dev_bev, HB_S16 what, HB_VOID *arg)
+
+
+/*
+ *	Function: 基本认证回调函数
+ *
+ *	@param bev: 与设备的链接句柄
+ *  @parmm args	: 实际为LIBEVENT_ARGS_HANDLE类型的参数结构体
+ *
+ *	Retrun: 无
+ */
+static void read_dev_sdp_basic_cb(struct bufferevent *connect_dev_bev, void *arg)
 {
+	HB_S32 i;
 	DEV_LIST_HANDLE pDevNode = (DEV_LIST_HANDLE) arg;
 	list_t *plistWaitClient = (list_t *) &(pDevNode->listWaitClient);
+	BOX_CTRL_CMD_OBJ st_MsgHead;
+	HB_CHAR arr_RecvBuf[10240] = { 0 };
+	HB_CHAR arr_SendBuf[2048] = { 0 };
 
-	if (what & BEV_EVENT_CONNECTED)    //盒子主动connect设备成功
+	bufferevent_read(connect_dev_bev, arr_RecvBuf, sizeof(arr_RecvBuf));
+	printf("=============recv sdp:[%s]\n", arr_RecvBuf);
+#if 1
+	rtsp_parser_t* parser;
+	parser = rtsp_parser_create(RTSP_PARSER_CLIENT);
+	if(NULL == parser)
 	{
-		//连接设备成功发送describe获取sdp信息
-		HB_CHAR arr_Discribe[1024] = { 0 };
+		return;
+	}
+	HB_S32 msg_len = strlen(arr_RecvBuf);
+	if(rtsp_parser_input(parser, arr_RecvBuf, &msg_len) != 0)
+	{
+		return;
+	}
 
-		if (pDevNode->iDevStreamType == 0)
+	HB_S32 rtsp_code = 0;
+	rtsp_code = rtsp_get_status_code(parser);
+
+	if(rtsp_code != 200 && rtsp_code != 401)
+	{
+		rtsp_parser_destroy(parser);
+		return;
+	}
+
+	if (401 == rtsp_code)
+	{
+		//基本认证失败，发送摘要认证
+		HB_CHAR cDiscribe[1024] = { 0 };
+
+		HB_CHAR *authenticate_str = NULL;
+		authenticate_str = rtsp_get_header_by_name(parser, (const char*)"WWW-Authenticate");
+		rtsp_parser_destroy(parser);
+		if(NULL == authenticate_str)
 		{
-			//主码流
-			snprintf(arr_Discribe, sizeof(arr_Discribe),
-							"DESCRIBE %s RTSP/1.0\r\nCSeq: 3\r\nAccept: application/sdp\r\nAuthorization: Basic %s\r\n\r\n",
-							pDevNode->arrDevRtspMainUrl, pDevNode->arrBasicAuthenticate);
-			printf("DESCRIBE main 1: [%s]\n", arr_Discribe);
+			return;
 		}
-		else
+		if(strcasestr(authenticate_str, "Digest")) //摘要认证
 		{
-			//子码流
-			if ((pDevNode->arrDevRtspSubUrl == NULL) || (strlen(pDevNode->arrDevRtspSubUrl) == 0))
+			if(get_realm_and_nonce(authenticate_str, pDevNode) < 0)
 			{
-				//没有子码流依然使用主码流
-				snprintf(arr_Discribe, sizeof(arr_Discribe),
-								"DESCRIBE %s RTSP/1.0\r\nCSeq: 3\r\nAccept: application/sdp\r\nAuthorization: Basic %s\r\n\r\n",
-								pDevNode->arrDevRtspMainUrl, pDevNode->arrBasicAuthenticate);
-				printf("DESCRIBE main 2: [%s]\n", arr_Discribe);
+				return;
+			}
+
+			printf("\nMMMMMMM   realm=[%s] nonce=[%s]\n", pDevNode->realm, pDevNode->nonce);
+			HB_CHAR response[64] = {0};
+			get_response(response, "DESCRIBE", pDevNode);
+			memset(cDiscribe, 0, sizeof(cDiscribe));
+			if (pDevNode->iDevStreamType == 0)
+			{
+				//主码流
+				snprintf(cDiscribe, sizeof(cDiscribe), SEND_DESCRIBE_DIGEST_MSG, pDevNode->arrDevRtspMainUrl, pDevNode->arrUserName,
+								pDevNode->realm, pDevNode->nonce, pDevNode->arrDevRtspMainUrl, response);
 			}
 			else
 			{
-				//有子码流
-				snprintf(arr_Discribe, sizeof(arr_Discribe),
-								"DESCRIBE %s RTSP/1.0\r\nCSeq: 3\r\nAccept: application/sdp\r\nAuthorization: Basic %s\r\n\r\n",
-								pDevNode->arrDevRtspSubUrl, pDevNode->arrBasicAuthenticate);
-				printf("DESCRIBE sub 1: [%s]\n", arr_Discribe);
+				//子码流
+				if ((pDevNode->arrDevRtspSubUrl == NULL) || (strlen(pDevNode->arrDevRtspSubUrl) == 0))
+				{
+					//没有子码流依然使用主码流
+					snprintf(cDiscribe, sizeof(cDiscribe), SEND_DESCRIBE_DIGEST_MSG, pDevNode->arrDevRtspMainUrl, pDevNode->arrUserName,
+													pDevNode->realm, pDevNode->nonce, pDevNode->arrDevRtspMainUrl, response);
+				}
+				else
+				{
+					//有子码流
+					snprintf(cDiscribe, sizeof(cDiscribe), SEND_DESCRIBE_DIGEST_MSG, pDevNode->arrDevRtspSubUrl, pDevNode->arrUserName,
+													pDevNode->realm, pDevNode->nonce, pDevNode->arrDevRtspSubUrl, response);
+				}
 			}
-		}
 
-		TRACE_GREEN("\n############  connect dev successful and start to get dev SDP !\n");
-		bufferevent_write(connect_dev_bev, arr_Discribe, strlen(arr_Discribe));
+			printf("\n>>>>>>>>>>>>>>>>>>>>>>> authentication DESCRIBE send: [%s]\n", cDiscribe);
+
+			bufferevent_write(connect_dev_bev, cDiscribe, strlen(cDiscribe));
+			bufferevent_setcb(connect_dev_bev, read_dev_sdp_digest_cb, NULL, active_connect_eventcb, (HB_VOID *) pDevNode);
+			bufferevent_enable(connect_dev_bev, EV_READ);
+
+			return ;
+		}
 	}
-	else
+	bufferevent_free(connect_dev_bev);
+	connect_dev_bev = NULL;
+#endif
+	analysis_sdp_info(arr_RecvBuf, pDevNode);
+
+	printf("=============sdp:[%s]\n", arr_RecvBuf);
+	memset(&st_MsgHead, 0, sizeof(st_MsgHead));
+	memcpy(st_MsgHead.header, "hBzHbox@", 8);
+	st_MsgHead.cmd_code = CMD_OK;
+
+	snprintf(arr_SendBuf + sizeof(BOX_CTRL_CMD_OBJ), 2048 - sizeof(BOX_CTRL_CMD_OBJ),
+					"{\"CmdType\":\"sdp_info\",\"m_video\":\"%s\",\"a_rtpmap_video\":\"%s\",\"a_fmtp_video\":\"%s\",\"m_audio\":\"%s\",\"a_rtpmap_audio\":\"%s\"}",
+					pDevNode->m_video, pDevNode->a_rtpmap_video, pDevNode->a_fmtp_video, pDevNode->m_audio, pDevNode->a_rtpmap_audio);
+
+	st_MsgHead.cmd_length = htonl(strlen(arr_SendBuf + sizeof(BOX_CTRL_CMD_OBJ)));
+//	st_MsgHead.cmd_length = strlen(arr_SendBuf+sizeof(BOX_CTRL_CMD_OBJ));
+
+	memcpy(arr_SendBuf, &st_MsgHead, sizeof(BOX_CTRL_CMD_OBJ));
+
+//	printf("st_MsgHead.cmd_length = %d, head_len[%d]\n", st_MsgHead.cmd_length, sizeof(BOX_CTRL_CMD_OBJ));
+	pDevNode->enumDevConnectStatus = CONNECTED;    //设置为设备已连接状态
+
+	for (i = 0; i < list_size(plistWaitClient); i++)
 	{
-		//盒子connect 设备失败,当数据库中有此设备，但此设备ip连接不上时会进到此接口
-		TRACE_ERR("\n###########  box connect dev  failed !\n");
-		pDevNode->enumDevConnectStatus = DISCONNECT;    //设置设备连接失败状态
-
-		if (pDevNode != NULL)
-		{
-			printf("del one dev from dev_list!\n");
-			pthread_rwlock_wrlock(&rwlockMyLock);
-			list_destroy(plistWaitClient);
-			list_delete(&listDevList, (HB_VOID *) pDevNode);
-			pDevNode = NULL;
-			pthread_rwlock_unlock(&rwlockMyLock);
-		}
-//		此连接事件由deal_client_cmd_error_cb1超时时进行释放
-		printf("active_connect_eventcb free bev!\n");
-		bufferevent_free(connect_dev_bev);
-		connect_dev_bev = NULL;
+		WAIT_CLIENT_LIST_HANDLE pCurWaitClient = (WAIT_CLIENT_LIST_HANDLE) list_get_at(plistWaitClient, i);
+		struct bufferevent *p_AcceptClient_bev = pCurWaitClient->pWaitClientBev;
+		bufferevent_write(p_AcceptClient_bev, arr_SendBuf, ntohl(st_MsgHead.cmd_length) + sizeof(BOX_CTRL_CMD_OBJ));
+		bufferevent_setcb(p_AcceptClient_bev, deal_client_cmd, NULL, deal_client_cmd_error_cb2, (HB_VOID *) pDevNode);
+		bufferevent_enable(p_AcceptClient_bev, EV_READ);
 	}
+	pthread_rwlock_wrlock(&rwlockMyLock);
+	list_destroy(plistWaitClient);
+	pthread_rwlock_unlock(&rwlockMyLock);
 }
+
 
 /*
  * Function: 测试设备的连通性
@@ -309,7 +522,7 @@ HB_VOID test_dev_connection(DEV_LIST_HANDLE pDevNode)
 	printf("pDevNode->arrDevIp[%s], pDevNode->port[%d]\n", pDevNode->arrDevIp, pDevNode->iDevRtspPort);
 
 	bufferevent_set_timeouts(connect_dev_bev, &tv_read, NULL);
-	bufferevent_setcb(connect_dev_bev, read_dev_sdp_cb, NULL, active_connect_eventcb, (HB_VOID *)pDevNode);
+	bufferevent_setcb(connect_dev_bev, read_dev_sdp_basic_cb, NULL, active_connect_eventcb, (HB_VOID *)pDevNode);
 	bufferevent_socket_connect(connect_dev_bev, (struct sockaddr*) &connect_to_addr, sizeof(struct sockaddr_in));
 	bufferevent_enable(connect_dev_bev, EV_READ | EV_WRITE);
 }

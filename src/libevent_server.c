@@ -12,6 +12,8 @@
 #include "simclist.h"
 #include "common.h"
 
+#include "cJSON.h"
+
 
 extern GLOBLE_PARAM glParam;
 struct event_base *pEventBase;
@@ -393,9 +395,9 @@ static HB_VOID deal_client_cmd_error_cb1(struct bufferevent *bev, short events, 
  *
  *	Retrun: 成功返回0，失败返回-1
  */
-static HB_S32 analysis_json_dev_info(char *p_SrcJson, char *pDevId, int *pDevChnl, int *pDevStreamType)
+static HB_S32 analysis_json_dev_info(HB_CHAR *pSrcJson, HB_CHAR *pDevId, HB_S32 *pDevChnl, HB_S32 *pDevStreamType)
 {
-	cJSON *pJson = cJSON_Parse(p_SrcJson);
+	cJSON *pJson = cJSON_Parse(pSrcJson);
 	if(NULL == pJson)
 	{
 		return HB_FAILURE;
@@ -406,17 +408,21 @@ static HB_S32 analysis_json_dev_info(char *p_SrcJson, char *pDevId, int *pDevChn
 		cJSON_Delete(pJson);
 		return HB_FAILURE;
 	}
+
 	if(!strcmp(pJsonCmdType->valuestring, "open_video"))
 	{
 		cJSON *pJsonDevId = cJSON_GetObjectItem(pJson, "devId");
 		if (pJsonDevId != NULL)
 			strcpy(pDevId, pJsonDevId->valuestring);
+
 		cJSON *pJsonDevChnl = cJSON_GetObjectItem(pJson, "devChnl");
 		if (pJsonDevChnl != NULL)
 			*pDevChnl = pJsonDevChnl->valueint;
+
 		cJSON *pJsonStreamType = cJSON_GetObjectItem(pJson, "devStreamType");
 		if (pJsonStreamType != NULL)
 			*pDevStreamType = pJsonStreamType->valueint;
+
 		cJSON_Delete(pJson);
 	}
 	else
@@ -464,56 +470,41 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 	HB_S32 iDevChnl = -1;		//设备通道号
 	HB_S32 iDevStreamType = -1;//主子码流 0主码流，1子码流
 	DEV_LIST_HANDLE pDevNode = NULL;
-	HB_CHAR accDevId[MAX_DEV_ID_LEN] = {0}; //设备ID
-	HB_CHAR accDevIdTmp[MAX_DEV_ID_LEN] = {0}; //设备ID
-	HB_CHAR accDevIdDecode[MAX_DEV_ID_LEN] = {0}; //设备ID
-
-	analysis_json_dev_info(pCmdBuf, accDevIdTmp, &iDevChnl, &iDevStreamType);
-	url_decode(accDevIdTmp, strlen(accDevIdTmp), accDevIdDecode, MAX_DEV_ID_LEN);
-//	strncpy(accDevId, accDevIdDecode+glParam.iMacSnLen, MAX_DEV_ID_LEN);
-	strncpy(accDevId, accDevIdDecode, MAX_DEV_ID_LEN);
-//	memset(accDevId, 0, sizeof(accDevId));
-//	strcpy(accDevId, "DS-2CD1201D-I320170526AACH766877798");
-
-	TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", accDevIdDecode, iDevChnl, iDevStreamType);
-
-#ifdef HAND_SERVER_IP
-	memset(accDevId, 0, sizeof(accDevId));
-//	strcpy(accDevId, "DS-2CD1201D-I320170526AACH766877798");
-	strcpy(accDevId, "12345");
-#endif
+	HB_CHAR cDevId[MAX_DEV_ID_LEN] = {0}; //设备ID
 
 	DEV_INFO_OBJ stCurDev;
 	memset(&stCurDev, 0, sizeof(DEV_INFO_OBJ));
 
-	list_attributes_seeker(&listDevList, DevSeeker);
-	strncpy(stCurDev.pDevId, accDevId, sizeof(stCurDev.pDevId));
+	analysis_json_dev_info(pCmdBuf, cDevId, &iDevChnl, &iDevStreamType);
+	url_decode(cDevId, strlen(cDevId), stCurDev.pDevId, MAX_DEV_ID_LEN);
 	stCurDev.iDevChnl = iDevChnl;
 	stCurDev.iDevStreamType = iDevStreamType;
+	TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", cDevId, iDevChnl, iDevStreamType);
+
 	pthread_rwlock_wrlock(&rwlockMyLock);
+	list_attributes_seeker(&listDevList, DevSeeker);
 	pDevNode = list_seek(&listDevList, &stCurDev);
 	if (pDevNode == NULL)
 	{
 		//未找到设备
-		HB_CHAR sql[1024] = {0};
+		HB_CHAR cSql[1024] = {0};
 
 		pDevNode = (DEV_LIST_HANDLE)malloc(sizeof(DEV_LIST_OBJ));
 		memset(pDevNode, 0, sizeof(DEV_LIST_OBJ));
-
 		list_init(&(pDevNode->listRtspClient));
 		list_init(&(pDevNode->listWaitClient));
 
-		TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", accDevId, iDevChnl, iDevStreamType);
-		snprintf(sql, sizeof(sql), \
+		TRACE_YELLOW("devid=[%s] dev_chnl=[%d] dev_stream_type=[%d]\n", cDevId, iDevChnl, iDevStreamType);
+		snprintf(cSql, sizeof(cSql), \
 			"select dev_ip,rtsp_port,dev_login_usr,dev_login_passwd,basic_authenticate,rtsp_list.rtsp_main,rtsp_list.rtsp_sub from onvif_dev_data left join rtsp_list on onvif_dev_data.dev_id='%s' where rtsp_list.[dev_id]=onvif_dev_data.dev_id and rtsp_list.[dev_chnl_num]='%d'", \
-			accDevId, iDevChnl);
-		if (sql_operation(sql, DEV_DATA_BASE_NAME, load_device_ip_port_cb, (HB_VOID *)pDevNode) < 0)
+			cDevId, iDevChnl);
+		if (sql_operation(cSql, DEV_DATA_BASE_NAME, load_device_ip_port_cb, (HB_VOID *)pDevNode) < 0)
 		{
 			//数据库操作失败
 			free(pDevNode);
 			pDevNode = NULL;
 			pthread_rwlock_unlock(&rwlockMyLock);
-			TRACE_ERR("data_base[%s] exec[%s] failed!\n", DEV_DATA_BASE_NAME, sql);
+			TRACE_ERR("data_base[%s] exec[%s] failed!\n", DEV_DATA_BASE_NAME, cSql);
 			return HB_FAILURE;
 		}
 		if ((pDevNode->arrDevIp == NULL) || (strlen(pDevNode->arrDevIp) < 7))//ip长度至少为7位(0.0.0.0)
@@ -522,12 +513,11 @@ static HB_S32 deal_open_video_cmd(HB_CHAR *pCmdBuf, struct bufferevent *pClientB
 			free(pDevNode);
 			pDevNode = NULL;
 			pthread_rwlock_unlock(&rwlockMyLock);
-			TRACE_ERR("The device [%s]chnl[%d]stream_type[%d] do not in the database!\n", accDevId, iDevChnl, iDevStreamType);
+			TRACE_ERR("The device [%s]chnl[%d]stream_type[%d] do not in the database!\n", cDevId, iDevChnl, iDevStreamType);
 			return HB_FAILURE;
 		}
 
-
-		strncpy(pDevNode->pDevId, accDevId, sizeof(pDevNode->pDevId));
+		strncpy(pDevNode->pDevId, cDevId, sizeof(pDevNode->pDevId));
 		pDevNode->iDevChnl = iDevChnl;
 		pDevNode->iDevStreamType = iDevStreamType;
 		pDevNode->enumDevConnectStatus = CONNECTING;
@@ -743,7 +733,7 @@ static HB_S32 stop_stream(HB_CHAR *pCmdBuf, struct bufferevent *pClientBev)
 	HB_CHAR arrDevIdTmp[MAX_DEV_ID_LEN] = {0}; //设备ID
 	HB_CHAR arrDevIdDecode[MAX_DEV_ID_LEN] = {0}; //设备ID
 	BOX_CTRL_CMD_OBJ st_MsgHead;
-	HB_CHAR arrcMsgBody[128] = {0};
+	HB_CHAR cMsgBody[128] = {0};
 	HB_CHAR arrcSendBuf[256] = {0};
 
 	cJSON *pRoot;
@@ -764,13 +754,13 @@ static HB_S32 stop_stream(HB_CHAR *pCmdBuf, struct bufferevent *pClientBev)
 	memset(&st_MsgHead, 0, sizeof(BOX_CTRL_CMD_OBJ));
 	strncpy(st_MsgHead.header, "hBzHbox@", sizeof(st_MsgHead.header));
 	//返回接收命令成功信令
-	snprintf(arrcMsgBody, sizeof(arrcMsgBody), \
+	snprintf(cMsgBody, sizeof(cMsgBody), \
 		"{\"cmdType\":\"stop\",\"serverIp\":\"%s\",\"serverPort\":%d,\"devId\":\"%s\",\"devChnl\":%d,\"streamType\":%d}", \
 		arrServerIp, iServerPort, arrDevId, iDevChnl, iDevStreamType);
-//	st_MsgHead.cmd_length = htonl(strlen(arrcMsgBody));
-	st_MsgHead.cmd_length = strlen(arrcMsgBody);
+//	st_MsgHead.cmd_length = htonl(strlen(cMsgBody));
+	st_MsgHead.cmd_length = strlen(cMsgBody);
 	memcpy(arrcSendBuf, &st_MsgHead, sizeof(st_MsgHead));
-	strncpy(arrcSendBuf+sizeof(st_MsgHead), arrcMsgBody, sizeof(arrcSendBuf)-sizeof(st_MsgHead));
+	strncpy(arrcSendBuf+sizeof(st_MsgHead), cMsgBody, sizeof(arrcSendBuf)-sizeof(st_MsgHead));
 
 	struct sockaddr_in stServeraddr;
 	HB_S32 iServeraddrLen;
@@ -791,7 +781,7 @@ static HB_S32 stop_stream(HB_CHAR *pCmdBuf, struct bufferevent *pClientBev)
 }
 
 
-//extern char cServerIp[16];
+
 /*
  *	Function: 读取回调函数,用于处理接从客户端接收到的信令，并根据信令能容做相应处理
  *
@@ -800,28 +790,29 @@ static HB_S32 stop_stream(HB_CHAR *pCmdBuf, struct bufferevent *pClientBev)
  *
  *	Retrun: 无
  */
-HB_VOID deal_client_cmd(struct bufferevent *pClientBev, void *arg)
+HB_VOID deal_client_cmd(struct bufferevent *pClientBev, HB_HANDLE hArg)
 {
-	HB_CHAR *pPos = NULL;
+	HB_CHAR *pJsonString = NULL;
 	BOX_CTRL_CMD_OBJ stMsgHead;
-	HB_CHAR arrcProtocol[8] = {0};
-	HB_CHAR arrcCmdType[32] = {0};
-	HB_CHAR arrcRetBuf[128] = {0};
-	HB_CHAR arrcMsgBody[32] = {0};
-	HB_CHAR arrcRecvCmdBuf[CMD_MAX_LEN] = {0};
+	HB_CHAR cProtocol[8] = {0};
+	HB_CHAR cCmdType[32] = {0};
+	HB_CHAR cRetBuf[128] = {0};
+	HB_CHAR cMsgBody[32] = {0};
+	HB_CHAR cRecvCmdBuf[CMD_MAX_LEN] = {0};
 
 	memset(&stMsgHead, 0, sizeof(BOX_CTRL_CMD_OBJ));
 
-	struct evbuffer *src = bufferevent_get_input(pClientBev);//获取输入缓冲区
-	HB_S32 len = evbuffer_get_length(src);//获取输入缓冲区中数据的长度，也就是可以读取的长度。
+	struct evbuffer *pBufferInput = bufferevent_get_input(pClientBev);//获取输入缓冲区
+	HB_S32 iBufferInputLen = evbuffer_get_length(pBufferInput);//获取输入缓冲区中数据的长度，也就是可以读取的长度。
 
-	if(len < sizeof(BOX_CTRL_CMD_OBJ))
+	if(iBufferInputLen < sizeof(BOX_CTRL_CMD_OBJ))
 	{
+		//缓冲区内的数据长度小于头长度
 		printf("data small than head len! continue ...\n");
 		return;
 	}
 
-	evbuffer_copyout(src, (void*)(&stMsgHead), sizeof(BOX_CTRL_CMD_OBJ));
+	evbuffer_copyout(pBufferInput, (HB_VOID *)(&stMsgHead), sizeof(BOX_CTRL_CMD_OBJ));
 	if (strncmp(stMsgHead.header, "hBzHbox@", strlen("hBzHbox@")) != 0)
 	{
 		//头消息错误，直接关闭返回
@@ -830,72 +821,72 @@ HB_VOID deal_client_cmd(struct bufferevent *pClientBev, void *arg)
 		return ;
 	}
 
-	if(evbuffer_get_length(src) < (ntohl(stMsgHead.cmd_length) + sizeof(BOX_CTRL_CMD_OBJ)))
+	if(evbuffer_get_length(pBufferInput) < (ntohl(stMsgHead.cmd_length) + sizeof(BOX_CTRL_CMD_OBJ)))
 	{
-		printf("\n2222222222recv len=%d   msg_len=%d\n", (HB_S32)evbuffer_get_length(src), (HB_S32)(ntohl(stMsgHead.cmd_length)));
+		printf("\n2222222222recv len=%d   msg_len=%d\n", (HB_S32)evbuffer_get_length(pBufferInput), (HB_S32)(ntohl(stMsgHead.cmd_length)));
 		return;
 	}
-	bufferevent_read(pClientBev, (HB_VOID*)(arrcRecvCmdBuf), (ntohl(stMsgHead.cmd_length) + sizeof(BOX_CTRL_CMD_OBJ)));
+	bufferevent_read(pClientBev, (HB_VOID*)(cRecvCmdBuf), (ntohl(stMsgHead.cmd_length) + sizeof(BOX_CTRL_CMD_OBJ)));
 	bufferevent_disable(pClientBev, EV_READ);
 
-	pPos = arrcRecvCmdBuf+sizeof(BOX_CTRL_CMD_OBJ);
+	pJsonString = cRecvCmdBuf+sizeof(BOX_CTRL_CMD_OBJ);
 	cJSON *pRoot;
-	pRoot = cJSON_Parse(pPos);
+	pRoot = cJSON_Parse(pJsonString);
 	cJSON *pProtocol = cJSON_GetObjectItem(pRoot, "protocol");
 	if (pProtocol != NULL)
 	{
-		strncpy(arrcProtocol, pProtocol->valuestring, sizeof(arrcProtocol)); //rtsp或hls
+		strncpy(cProtocol, pProtocol->valuestring, sizeof(cProtocol)); //rtsp或hls
 	}
 
 	cJSON *pCmdType = cJSON_GetObjectItem(pRoot, "cmdType");
 	if (pCmdType != NULL)
 	{
-		strncpy(arrcCmdType, pCmdType->valuestring, sizeof(arrcCmdType)); //play或stop
-		printf("arrcCmdType:[%s]\n", arrcCmdType);
+		strncpy(cCmdType, pCmdType->valuestring, sizeof(cCmdType)); //play或stop
+		printf("cCmdType:[%s]\n", cCmdType);
 	}
-	if (!strncmp(arrcCmdType, "open_video", 10))
+
+	if (!strncmp(cCmdType, "open_video", 10))
 	{
-		TRACE_GREEN("Recv Cmd1 : [%s]\n", arrcRecvCmdBuf+sizeof(BOX_CTRL_CMD_OBJ));
+		TRACE_GREEN("Recv Cmd1 : [%s]\n", cRecvCmdBuf+sizeof(BOX_CTRL_CMD_OBJ));
 		//收到rtsp打开请求
-		deal_open_video_cmd(arrcRecvCmdBuf+sizeof(BOX_CTRL_CMD_OBJ), pClientBev);
+		deal_open_video_cmd(cRecvCmdBuf+sizeof(BOX_CTRL_CMD_OBJ), pClientBev);
 	}
-	else if (!strncmp(arrcCmdType, "server_info", 11))
+	else if (!strncmp(cCmdType, "server_info", 11))
 	{
-		TRACE_GREEN("Recv Cmd2 : [%s]\n", arrcRecvCmdBuf+sizeof(BOX_CTRL_CMD_OBJ));
-		HB_CHAR arrServerIp[16] = {0};
+		TRACE_GREEN("Recv Cmd2 : [%s]\n", cRecvCmdBuf+sizeof(BOX_CTRL_CMD_OBJ));
+		HB_CHAR cServerIp[16] = {0};
 		HB_S32	iServerPort = -1;
 
 		cJSON *pServerIp = cJSON_GetObjectItem(pRoot, "serverIp");
 		if (pServerIp != NULL)
-			strncpy(arrServerIp, pServerIp->valuestring, sizeof(arrServerIp));
+		{
+			strncpy(cServerIp, pServerIp->valuestring, sizeof(cServerIp));
+		}
 		cJSON *pServerPort = cJSON_GetObjectItem(pRoot, "serverPort");
 		if (NULL != pServerPort)
+		{
 			iServerPort = pServerPort->valueint;
+		}
 		//拿到了rtsp服务器的ip和端口，需要将视频流发到这里
 		//创建线程并发送数据
 		bufferevent_free(pClientBev);
 		pClientBev = NULL;
 
-#ifdef HAND_SERVER_IP
-		printf("cServerIp:[%s], iServerPort=%d\n", glParam.cServerIp, iServerPort);
-		connect_to_rtsp_server(glParam.cServerIp, iServerPort, (DEV_LIST_HANDLE)arg);
-#else
-		printf("cServerIp:[%s], iServerPort=%d\n", arrServerIp, iServerPort);
-		connect_to_rtsp_server(arrServerIp, iServerPort, (DEV_LIST_HANDLE)arg);
-#endif
+		printf("cServerIp:[%s], iServerPort=%d\n", cServerIp, iServerPort);
+		connect_to_rtsp_server(cServerIp, iServerPort, (DEV_LIST_HANDLE)hArg);
 	}
 	else
 	{
 		//返回接收命令成功信令
-		strncpy(arrcMsgBody, "{\"code\":0}", sizeof(arrcMsgBody));
-		stMsgHead.cmd_length = htonl(strlen(arrcMsgBody));
-		memcpy(arrcRetBuf, &stMsgHead, sizeof(stMsgHead));
-		strncpy(arrcRetBuf+sizeof(stMsgHead), arrcMsgBody, sizeof(arrcRetBuf)-sizeof(stMsgHead));
-		bufferevent_write(pClientBev, arrcRetBuf, sizeof(arrcMsgBody)+sizeof(stMsgHead));
+		strncpy(cMsgBody, "{\"code\":0}", sizeof(cMsgBody));
+		stMsgHead.cmd_length = htonl(strlen(cMsgBody));
+		memcpy(cRetBuf, &stMsgHead, sizeof(stMsgHead));
+		strncpy(cRetBuf+sizeof(stMsgHead), cMsgBody, sizeof(cRetBuf)-sizeof(stMsgHead));
+		bufferevent_write(pClientBev, cRetBuf, sizeof(cMsgBody)+sizeof(stMsgHead));
 		bufferevent_setcb(pClientBev, deal_write_ok, NULL, NULL, NULL);
 		bufferevent_enable(pClientBev, EV_WRITE);
 
-		if (strncmp(arrcProtocol, "rtsp", 4) == 0)
+		if (strncmp(cProtocol, "rtsp", 4) == 0)
 		{
 			struct sockaddr_in stServeraddr;
 			HB_S32 iServeraddrLen;
@@ -908,95 +899,33 @@ HB_VOID deal_client_cmd(struct bufferevent *pClientBev, void *arg)
 			inet_pton(AF_INET, "127.0.0.1", &stServeraddr.sin_addr);
 			iServeraddrLen = sizeof(struct sockaddr_in);
 
-			bufferevent_setcb(pSendMsgToPushClientEvent, NULL, NULL, send_msg_to_push_client, (HB_VOID *)arrcRecvCmdBuf);
+			bufferevent_setcb(pSendMsgToPushClientEvent, NULL, NULL, send_msg_to_push_client, (HB_VOID *)cRecvCmdBuf);
 			bufferevent_socket_connect(pSendMsgToPushClientEvent, (struct sockaddr*)&stServeraddr, iServeraddrLen);
 		}
-		else if (strncmp(arrcProtocol, "hls", 3) == 0)
+		else if (strncmp(cProtocol, "hls", 3) == 0)
 		{
-			if (strncmp(arrcCmdType, "play", 4) == 0)
+			if (strncmp(cCmdType, "play", 4) == 0)
 			{
 				//收到推送视频流信令
-				TRACE_GREEN("Recv Cmd : [%s]\n", arrcRecvCmdBuf+sizeof(BOX_CTRL_CMD_OBJ));
-				push_stream(arrcRecvCmdBuf+sizeof(BOX_CTRL_CMD_OBJ), pClientBev);
+				TRACE_GREEN("Recv Cmd : [%s]\n", cRecvCmdBuf+sizeof(BOX_CTRL_CMD_OBJ));
+				push_stream(cRecvCmdBuf+sizeof(BOX_CTRL_CMD_OBJ), pClientBev);
 			}
-			else if (strncmp(arrcCmdType, "stop", 4) == 0)
+			else if (strncmp(cCmdType, "stop", 4) == 0)
 			{
 				//收到关闭视频流信令
-				TRACE_GREEN("Recv Cmd : [%s]\n", arrcRecvCmdBuf+sizeof(BOX_CTRL_CMD_OBJ));
-				stop_stream(arrcRecvCmdBuf+sizeof(BOX_CTRL_CMD_OBJ), pClientBev);
+				TRACE_GREEN("Recv Cmd : [%s]\n", cRecvCmdBuf+sizeof(BOX_CTRL_CMD_OBJ));
+				stop_stream(cRecvCmdBuf+sizeof(BOX_CTRL_CMD_OBJ), pClientBev);
 			}
 		}
 		else
 		{
-			TRACE_ERR("Recv ERR Cmd : [%s]\n", arrcRecvCmdBuf+sizeof(BOX_CTRL_CMD_OBJ));
+			TRACE_ERR("Recv ERR Cmd : [%s]\n", cRecvCmdBuf+sizeof(BOX_CTRL_CMD_OBJ));
 			//拿到了rtsp服务器的ip和端口，需要将视频流发到这里
 			//创建线程并发送数据
 			bufferevent_free(pClientBev);
 			pClientBev = NULL;
 		}
 	}
-
-#if 0
-	if(evbuffer_remove(src, &stMsgHead, sizeof(BOX_CTRL_CMD_OBJ)))
-	{
-		if (evbuffer_remove(src, arrcRecvCmdBuf, CMD_MAX_LEN) > 0)
-		{
-			if (strstr(arrc_RecvCmdBuf, "open_video") != NULL)
-			{
-				TRACE_GREEN("Recv Cmd1 : [%s]\n", arrcRecvCmdBuf);
-				//收到rtsp打开请求
-				deal_open_video_cmd(arrcRecvCmdBuf, pClientBev);
-			}
-			else if (strstr(arrcRecvCmdBuf, "server_info") != NULL)
-			{
-				TRACE_GREEN("Recv Cmd2 : [%s]\n", arrcRecvCmdBuf);
-				//拿到了rtsp服务器的ip和端口，需要将视频流发到这里
-				//创建线程并发送数据
-				bufferevent_free(pClientBev);
-				pClientBev = NULL;
-				connect_to_rtsp_server(arrcRecvCmdBuf, (DEV_LIST_HANDLE)arg);
-			}
-			else if(strstr(arrcRecvCmdBuf, "play") != NULL)
-			{
-				HB_CHAR arrcMsgBody[32] = {0};
-				HB_CHAR arrcRetBuf[128] = {0};
-//				bufferevent_read(pClientBev, (HB_VOID*)(arrc_RecvCmdBuf), (ntohl(st_MsgHead.cmd_length) + sizeof(BOX_CTRL_CMD_OBJ)));
-
-				bufferevent_disable(pClientBev, EV_READ);
-
-				//返回接收命令成功信令
-				strncpy(arrcMsgBody, "{\"code\":0}", sizeof(arrcMsgBody));
-				st_MsgHead.cmd_length = htonl(strlen(arrcMsgBody));
-				memcpy(arrcRetBuf, &st_MsgHead, sizeof(stMsgHead));
-				strncpy(arrcRetBuf+sizeof(stMsgHead), arrcMsgBody, sizeof(arrcRetBuf)-sizeof(stMsgHead));
-				bufferevent_write(pClientBev, arrcRetBuf, sizeof(arrcMsgBody)+sizeof(st_MsgHead));
-				bufferevent_setcb(pClientBev, deal_write_ok, NULL, NULL, NULL);
-				bufferevent_enable(pClientBev, EV_WRITE);
-				TRACE_GREEN("Recv Cmd : [%s]\n", arrcRecvCmdBuf+sizeof(BOX_CTRL_CMD_OBJ));
-				push_stream(arrcRecvCmdBuf+sizeof(BOX_CTRL_CMD_OBJ), pClientBev);
-			}
-			else if(strstr(arrcRecvCmdBuf, "stop") != NULL)
-			{
-				HB_CHAR arrcMsgBody[32] = {0};
-				HB_CHAR arrcRetBuf[128] = {0};
-//				bufferevent_read(pClientBev, (HB_VOID*)(arrc_RecvCmdBuf), (ntohl(st_MsgHead.cmd_length) + sizeof(BOX_CTRL_CMD_OBJ)));
-
-				bufferevent_disable(pClientBev, EV_READ);
-
-				//返回接收命令成功信令
-				strncpy(arrcMsgBody, "{\"code\":0}", sizeof(arrcMsgBody));
-				stMsgHead.cmd_length = htonl(strlen(arrcMsgBody));
-				memcpy(arrcRetBuf, &st_MsgHead, sizeof(stMsgHead));
-				strncpy(arrcRetBuf+sizeof(stMsgHead), arrcMsgBody, sizeof(arrcRetBuf)-sizeof(stMsgHead));
-				bufferevent_write(pClientBev, arrcRetBuf, sizeof(arrcMsgBody)+sizeof(stMsgHead));
-				bufferevent_setcb(pClientBev, deal_write_ok, NULL, NULL, NULL);
-				bufferevent_enable(pClientBev, EV_WRITE);
-				TRACE_GREEN("Recv Cmd : [%s]\n", arrcRecvCmdBuf+sizeof(BOX_CTRL_CMD_OBJ));
-				stop_stream(arrcRecvCmdBuf+sizeof(BOX_CTRL_CMD_OBJ), pClientBev);
-			}
-		}
-	}
-#endif
 }
 
 
@@ -1010,31 +939,26 @@ HB_VOID deal_client_cmd(struct bufferevent *pClientBev, void *arg)
  *	Retrun: 无
  */
 static HB_VOID accept_client_connect_cb(struct evconnlistener *pListener, evutil_socket_t iAcceptSockfd,
-	    struct sockaddr *pClientAddr, int slen, void *arg)
+	    struct sockaddr *pClientAddr, int slen, HB_HANDLE hArg)
 {
-
-#if 1
 	//打印对端ip
-	struct sockaddr_in *p_PeerAddr = (struct sockaddr_in *)pClientAddr;
-	char arrch_PeerIp[16] = {0};
-	inet_ntop(AF_INET, &(p_PeerAddr->sin_addr), arrch_PeerIp, sizeof(arrch_PeerIp));
-	TRACE_YELLOW("\nA new Client[%s]:[%d] connect !\n", arrch_PeerIp, ntohs(p_PeerAddr->sin_port));
-#endif
+	struct sockaddr_in *pPeerAddr = (struct sockaddr_in *)pClientAddr;
+	char cPeerIp[16] = {0};
+	inet_ntop(AF_INET, &(pPeerAddr->sin_addr), cPeerIp, sizeof(cPeerIp));
+	TRACE_YELLOW("\nA new Client[%s]:[%d] connect !\n", cPeerIp, ntohs(pPeerAddr->sin_port));
 
     // 为新的连接分配并设置 bufferevent,设置BEV_OPT_CLOSE_ON_FREE宏后，当连接断开时也会通知客户端关闭套接字
-    struct bufferevent *accept_sockfd_bev = bufferevent_socket_new(pEventBase, iAcceptSockfd, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_THREADSAFE);
+    struct bufferevent *pAcceptSockBev = bufferevent_socket_new(pEventBase, iAcceptSockfd, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_THREADSAFE);
     //设置低水位，当数据长度大于消息头时才读取数据
-    bufferevent_setwatermark(accept_sockfd_bev, EV_READ, sizeof(BOX_CTRL_CMD_OBJ)+1, 0);
+    bufferevent_setwatermark(pAcceptSockBev, EV_READ, sizeof(BOX_CTRL_CMD_OBJ)+1, 0);
     //设置超时，10秒内未收到对端发来数据则断开连接
     struct timeval tv_read;
     tv_read.tv_sec  = 10;
     tv_read.tv_usec = 0;
     //注意，在盒子连接设备处也设置了超时，此处超时需大于盒子与设备连接时的超时，当前盒子与设备连接超时时间为5s
-    bufferevent_set_timeouts(accept_sockfd_bev, &tv_read, NULL);
-    bufferevent_setcb(accept_sockfd_bev, deal_client_cmd, NULL, deal_client_cmd_error_cb1, NULL);
-    bufferevent_enable(accept_sockfd_bev, EV_READ);
-
-    return;
+    bufferevent_set_timeouts(pAcceptSockBev, &tv_read, NULL);
+    bufferevent_setcb(pAcceptSockBev, deal_client_cmd, NULL, deal_client_cmd_error_cb1, NULL);
+    bufferevent_enable(pAcceptSockBev, EV_READ);
 }
 
 

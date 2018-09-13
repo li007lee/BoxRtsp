@@ -15,9 +15,9 @@
 
 GLOBLE_PARAM glParam;
 
-int main(int argc, char **argv)
+HB_S32 main(HB_S32 argc, HB_CHAR **argv)
 {
-	int ret = 0;
+	HB_S32 ret = 0;
 	HB_CHAR cBoxSn[32] = { 0 }; //盒子序列号
 
 //	signal(SIGPIPE, SIG_IGN);
@@ -43,7 +43,7 @@ int main(int argc, char **argv)
 	}
 	strncpy(glParam.cServerIp, argv[1], 16);
 #endif
-//	av_register_all();
+
 	avformat_network_init();
 
 	list_init(&listDevList);

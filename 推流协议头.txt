@@ -1,0 +1,33 @@
+typedef enum _tagDATA_TYPE
+{
+    I_FRAME=1,   //I帧
+	BP_FRAME,    //BP帧
+}DATA_TYPE_E;
+
+typedef enum _tagCMD_TYPE
+{
+    BOX_PLAY_VIDEO=1,   //播放视频
+	BOX_DEV_TEST,        //设备在线查询
+	BOX_VIDEO_DATA,      //视频数据
+	BOX_AUDIO_DATA,      //音频数据
+}CMD_TYPE_E;
+
+typedef enum _tagCMD_CODE
+{
+    CMD_OK=1,   //请求成功
+	CMD_FAILED,//请求失败
+}CMD_CODE_E;
+
+
+//信令交互协议头
+typedef struct _tagBOX_CTRL_CMD
+{
+	HB_CHAR header[8]; //固定为"hBzHbox@"
+	HB_S32 cmd_length; //头消息后面的数据长度
+	DATA_TYPE_E data_type;
+	CMD_TYPE_E cmd_type;//信令类型
+	CMD_CODE_E cmd_code;
+	HB_S64	pts;
+//	HB_U32 uiVideoSec;	//视频当前秒数
+//	HB_U32 uiVideoUsec;	//视频当前微妙数
+}BOX_CTRL_CMD_OBJ, *BOX_CTRL_CMD_HANDLE;

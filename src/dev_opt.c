@@ -687,7 +687,7 @@ HB_VOID *read_video_data_from_dev_task(HB_VOID *arg)
 //				old_pts = p_pkt->pts;
 				if (1 == p_pkt->flags) //I帧
 				{
-//					printf("IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII=%ld\n", time(&time_now));
+					printf("IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII\n");
 //					time(&time_now);
 					if (iIFlag == 0)
 					{
